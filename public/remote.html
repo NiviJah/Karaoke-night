@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#100e1c">
+<title>Karaoke Night</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;600;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root {
+  --bg: #100e1c; --panel: #1a1730; --line: #2d2950; --fg: #ece9fb; --muted: #9a94c2;
+  --accent: #ffb547; --accent-ink: #241600; --mine: #2a2246; --warn: #ff7a8a;
+  --display: "Bungee", "Impact", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 var(--body); -webkit-tap-highlight-color: transparent; }
+.wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 0 40px; }
+
+header { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-block: calc(env(safe-area-inset-top, 0px) + 12px) 12px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
+h1 { font: 20px/1 var(--display); color: var(--accent); margin: 0; }
+.now { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.now .who { font-size: 13px; color: var(--muted); }
+.now .who b { color: var(--accent); }
+.now .what { font-weight: 800; overflow-wrap: anywhere; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 1s linear; }
+.controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+button { font: 600 15px var(--body); color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+button:active { transform: scale(.98); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.danger { border-color: var(--warn); color: var(--warn); }
+button:disabled { opacity: .4; }
+
+label.field { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+input[type=text], input[type=search] { font: 16px var(--body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; width: 100%; }
+
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-block: 14px 10px; }
+.tabs button[aria-selected=true] { background: var(--panel); border-color: var(--accent); color: var(--accent); }
+.badge { font: 12px var(--mono); background: var(--accent); color: var(--accent-ink); border-radius: 99px; padding: 1px 7px; margin-left: 4px; }
+
+ul { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+li.mine { background: var(--mine); border-color: var(--accent); }
+li .num { font: 12px var(--mono); color: var(--muted); min-width: 40px; font-variant-numeric: tabular-nums; }
+li .txt { flex: 1; min-width: 0; }
+li .t { font-weight: 600; overflow-wrap: anywhere; }
+li .a { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+li .tag { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 2px; }
+li .grip { border: 0; padding: 8px 4px; color: var(--muted); font-size: 18px; line-height: 1; cursor: grab; touch-action: none; flex: none; }
+li.dragging { position: relative; z-index: 4; box-shadow: 0 10px 24px rgb(0 0 0 / .5); border-color: var(--accent); cursor: grabbing; }
+li.dragging .grip { cursor: grabbing; }
+li .s { font-size: 13px; color: var(--accent); font-weight: 600; }
+li button { padding: 8px 12px; flex: none; }
+.empty { color: var(--muted); padding: 16px 4px; }
+.yt { display: grid; gap: 10px; }
+.yt p { margin: 0; color: var(--muted); font-size: 14px; }
+.yt ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
+.more { width: 100%; margin-top: 10px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.chips { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.chips button { border: 0; border-radius: 0; padding: 8px 12px; font-size: 14px; }
+.chips button + button { border-left: 1px solid var(--line); }
+.chips button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); }
+.filters select { font: 600 14px var(--body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; max-width: 100%; }
+.count { color: var(--muted); font-size: 13px; margin: 10px 2px 0; }
+li.letter { background: none; border: 0; padding: 10px 4px 0; font: 16px var(--display); color: var(--accent); }
+#songsPane { padding-right: 26px; position: relative; }
+.rail { position: fixed; right: max(4px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 3;
+  display: flex; flex-direction: column; align-items: center; padding: 6px 2px; border-radius: 12px; background: rgb(26 23 48 / .85);
+  touch-action: none; user-select: none; -webkit-user-select: none; }
+.rail span { font: 700 11px/1 var(--body); color: var(--accent); padding: 2.5px 6px; cursor: pointer; }
+.rail span.off { color: var(--line); }
+@media (max-height: 640px) { .rail span { padding: 1.5px 6px; font-size: 10px; } }
+.bubble { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; width: 96px; height: 96px; border-radius: 20px;
+  display: grid; place-items: center; font: 52px var(--display); background: var(--accent); color: var(--accent-ink); pointer-events: none; }
+.alert { position: fixed; inset: 0; z-index: 10; display: grid; place-content: center; gap: 14px; text-align: center; padding: 24px;
+  background: var(--accent); color: var(--accent-ink); animation: flash .5s ease-in-out 4 alternate; }
+.alert h2 { font: 34px/1.1 var(--display); margin: 0; text-wrap: balance; }
+.alert p { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.alert button { justify-self: center; background: var(--accent-ink); color: var(--accent); border: 0; font-size: 18px; padding: 12px 28px; }
+@keyframes flash { from { filter: brightness(1); } to { filter: brightness(1.25); } }
+@media (prefers-reduced-motion: reduce) { .alert { animation: none; } }
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); transform: translateX(-50%); background: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 10px 16px; border-radius: 10px; max-width: calc(100% - 32px); text-align: center; z-index: 5; }
+.offline { color: var(--warn); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Karaoke Night</h1>
+    <div class="now">
+      <div class="who" id="nowWho">Nothing playing</div>
+      <div class="what" id="nowWhat">Pick a song below to get things started.</div>
+      <div class="bar"><i id="nowBar"></i></div>
+      <div class="controls">
+        <button id="pauseBtn">Pause</button>
+        <button id="restartBtn">Restart</button>
+        <button id="skipBtn">Skip</button>
+      </div>
+      <div class="offline" id="offline" hidden>Reconnecting to the karaoke machine…</div>
+    </div>
+  </header>
+  <label class="field" for="singer" style="margin-top:14px">Your name
+    <input type="text" id="singer" maxlength="40" placeholder="Shown on the TV when it's your turn" autocomplete="nickname">
+  </label>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabSongs" aria-selected="true">Songs</button>
+    <button role="tab" id="tabYt" aria-selected="false" hidden>YouTube</button>
+    <button role="tab" id="tabQueue" aria-selected="false">Queue <span class="badge" id="qCount" hidden>0</span></button>
+  </div>
+
+  <section id="songsPane">
+    <input type="search" id="q" placeholder="Search by song, artist or number" autocomplete="off" enterkeyhint="search">
+    <div class="filters">
+      <div class="chips" role="group" aria-label="Song type" id="kindChips">
+        <button data-kind="all" aria-pressed="true">All</button>
+        <button data-kind="cdg" aria-pressed="false">Karaoke</button>
+        <button data-kind="video" aria-pressed="false">Video</button>
+      </div>
+      <select id="genre" aria-label="Genre" hidden><option value="">All genres</option></select>
+      <select id="sort" aria-label="Sort by">
+        <option value="artist">A–Z by artist</option>
+        <option value="title">A–Z by song</option>
+      </select>
+    </div>
+    <p class="count" id="count"></p>
+    <button class="more" id="earlier" hidden>Show earlier</button>
+    <ul id="results"></ul>
+    <button class="more" id="more" hidden>Show more</button>
+    <nav class="rail" id="rail" aria-label="Jump to letter" hidden></nav>
+  </section>
+
+  <section id="ytPane" class="yt" hidden>
+    <ol>
+      <li>In the YouTube app, search for the song plus <b>karaoke</b> (for example "Dancing Queen karaoke").</li>
+      <li>Tap <b>Share</b>, then <b>Copy link</b>.</li>
+      <li>Paste it here and tap <b>Add</b>.</li>
+    </ol>
+    <input type="text" id="ytLink" placeholder="Paste a YouTube link" autocomplete="off" inputmode="url" enterkeyhint="go">
+    <button class="primary" id="ytAdd">Add</button>
+    <p>Needs internet on the TV computer. A few videos can't be played outside YouTube; the TV skips those.</p>
+  </section>
+
+  <section id="queuePane" hidden>
+    <ul id="queue"></ul>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div class="bubble" id="bubble" hidden></div>
+<div class="alert" id="alert" role="alertdialog" aria-labelledby="alertTitle" hidden>
+  <h2 id="alertTitle">Your turn!</h2>
+  <p id="alertSong"></p>
+  <p>Head to the mic.</p>
+  <button id="alertOk">On my way</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let state = { queue: [], nowPlaying: null, status: {} };
+let results = [], total = 0, query = '', winStart = 0, letters = {};
+const filters = { kind: 'all', genre: '', sort: 'artist' };
+try { filters.sort = localStorage.getItem('sort') === 'title' ? 'title' : 'artist'; } catch {}
+
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+  .then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Something went wrong'); return j; });
+const me = () => $('singer').value.trim();
+const isMine = e => me() && e.singer.toLowerCase() === me().toLowerCase();
+
+let toastTimer;
+function toast(t) { $('toast').textContent = t; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 2500); }
+
+try { $('singer').value = localStorage.getItem('singer') || ''; } catch {}
+$('singer').addEventListener('input', () => { try { localStorage.setItem('singer', me()); } catch {} renderQueue(); });
+
+/* ---------- Tabs ---------- */
+function showTab(name) {
+  for (const [tab, pane, n] of [['tabSongs', 'songsPane', 'songs'], ['tabYt', 'ytPane', 'yt'], ['tabQueue', 'queuePane', 'queue']]) {
+    $(tab).setAttribute('aria-selected', name === n);
+    $(pane).hidden = name !== n;
+  }
+}
+$('tabSongs').onclick = () => showTab('songs');
+$('tabYt').onclick = () => showTab('yt');
+$('tabQueue').onclick = () => showTab('queue');
+
+/* ---------- Songs ---------- */
+function songRow(s, right) {
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="num"></span><span class="txt"><div class="t"></div><div class="a"></div></span>`;
+  li.querySelector('.num').textContent = s.number;
+  li.querySelector('.t').textContent = s.title;
+  if (s.kind === 'video') li.querySelector('.t').insertAdjacentHTML('beforeend', '<span class="tag">Video</span>');
+  li.querySelector('.a').textContent = s.artist;
+  if (right) li.append(right);
+  return li;
+}
+
+const LETTERS = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+const indexLetter = name => {
+  const c = (name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().charAt(0).toUpperCase();
+  return c >= 'A' && c <= 'Z' ? c : '#';
+};
+const sortName = s => filters.sort === 'title' ? s.title : (s.artist || s.title);
+
+function renderResults() {
+  const ul = $('results');
+  ul.innerHTML = '';
+  if (!results.length) {
+    ul.innerHTML = `<li class="empty">${query || filters.kind !== 'all' || filters.genre ? 'No songs match.' : 'No songs found on the drive yet.'}</li>`;
+  }
+  // A letter heading goes wherever a new letter starts (the server says where each letter starts).
+  const starts = new Set(Object.values(letters));
+  let prev = null;
+  results.forEach((s, i) => {
+    const L = indexLetter(sortName(s));
+    if (i === 0 ? starts.has(winStart) : L !== prev) {
+      const h = document.createElement('li');
+      h.className = 'letter'; h.textContent = L; h.dataset.letter = L;
+      ul.append(h);
+    }
+    prev = L;
+    const btn = document.createElement('button');
+    btn.className = 'primary'; btn.textContent = 'Add';
+    btn.onclick = () => addSong(s, btn);
+    ul.append(songRow(s, btn));
+  });
+  $('earlier').hidden = winStart === 0;
+  $('more').hidden = winStart + results.length >= total;
+  $('count').textContent = total ? `${total.toLocaleString()} song${total === 1 ? '' : 's'}` : '';
+  renderRail();
+}
+
+function renderRail() {
+  const rail = $('rail');
+  rail.hidden = total < 20 || $('songsPane').hidden;
+  rail.innerHTML = LETTERS.map(L => `<span data-l="${L}" class="${L in letters ? '' : 'off'}">${L}</span>`).join('');
+}
+
+const apiUrl = offset => `/api/songs?q=${encodeURIComponent(query)}&kind=${filters.kind}&genre=${encodeURIComponent(filters.genre)}&sort=${filters.sort}&offset=${offset}&limit=50`;
+let searchSeq = 0;
+// how: 'reset' | 'more' | 'earlier' | a number (jump to that position)
+async function search(how = 'reset') {
+  const seq = ++searchSeq;
+  const offset = how === 'more' ? winStart + results.length
+    : how === 'earlier' ? Math.max(0, winStart - 50)
+    : typeof how === 'number' ? how : 0;
+  const r = await fetch(apiUrl(offset)).then(r => r.json());
+  if (seq !== searchSeq) return;
+  total = r.total; letters = r.letters || {};
+  renderGenres(r.genres || [], r.counts || {});
+  const before = how === 'earlier' ? document.documentElement.scrollHeight : 0;
+  if (how === 'more') results = results.concat(r.songs);
+  else if (how === 'earlier') { results = r.songs.slice(0, winStart - offset).concat(results); winStart = offset; }
+  else { results = r.songs; winStart = offset; }
+  renderResults();
+  if (how === 'earlier') window.scrollBy(0, document.documentElement.scrollHeight - before); // keep your place
+  if (typeof how === 'number') scrollToList();
+}
+
+function scrollToList() {
+  const headerH = document.querySelector('header').getBoundingClientRect().height;
+  const top = $('results').getBoundingClientRect().top + window.scrollY - headerH - 8;
+  window.scrollTo(0, top);
+}
+
+let knownGenres = '';
+function renderGenres(list, counts) {
+  const sel = $('genre');
+  if (list.join('|') !== knownGenres) {
+    knownGenres = list.join('|');
+    sel.innerHTML = '<option value="">All genres</option>' + list.map(g => `<option></option>`).join('');
+    list.forEach((g, i) => { sel.options[i + 1].value = g; sel.options[i + 1].textContent = g; });
+    sel.value = filters.genre;
+  }
+  sel.hidden = !list.length;
+  // Only offer the Karaoke/Video switch when the drive has both kinds.
+  $('kindChips').hidden = !(counts.video && counts.cdg);
+}
+
+let searchTimer;
+$('q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { query = $('q').value.trim(); search(); }, 200); });
+$('more').onclick = () => search('more');
+$('earlier').onclick = () => search('earlier');
+for (const b of document.querySelectorAll('#kindChips button')) {
+  b.onclick = () => {
+    filters.kind = b.dataset.kind;
+    document.querySelectorAll('#kindChips button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    search();
+  };
+}
+$('genre').onchange = () => { filters.genre = $('genre').value; search(); };
+$('sort').value = filters.sort;
+$('sort').onchange = () => { filters.sort = $('sort').value; try { localStorage.setItem('sort', filters.sort); } catch {} search(); };
+
+// A-Z bar: tap a letter, or slide a finger along it.
+let railLetter = null, bubbleTimer;
+function railPick(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const L = el?.dataset?.l;
+  if (!L || L === railLetter) return;
+  railLetter = L;
+  // a letter with no songs jumps to the next one that has some
+  const target = LETTERS.slice(LETTERS.indexOf(L)).find(l => l in letters) ?? [...LETTERS].reverse().find(l => l in letters);
+  $('bubble').textContent = L; $('bubble').hidden = false;
+  clearTimeout(bubbleTimer); bubbleTimer = setTimeout(() => $('bubble').hidden = true, 700);
+  if (target !== undefined) search(letters[target]);
+}
+$('rail').addEventListener('pointerdown', e => { e.preventDefault(); railLetter = null; $('rail').setPointerCapture?.(e.pointerId); railPick(e.clientX, e.clientY); });
+$('rail').addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') railPick(e.clientX, e.clientY); });
+$('rail').addEventListener('pointerup', () => { railLetter = null; });
+
+async function addSong(s, btn, body) {
+  if (!me()) { toast('Type your name first'); $('singer').focus(); return false; }
+  btn.disabled = true;
+  let ok = false;
+  try {
+    const r = await post('/api/queue', { ...(body || { key: s.key }), singer: me() });
+    const title = r.entry.song.title;
+    toast(r.position === 1 && !state.nowPlaying ? `${title} is up now` : `Added ${title}. You're #${r.position} in the queue.`);
+    ok = true;
+  } catch (err) { toast(err.message); }
+  btn.disabled = false;
+  return ok;
+}
+
+$('ytAdd').onclick = async () => {
+  const link = $('ytLink').value.trim();
+  if (!link) { toast('Paste a YouTube link first'); $('ytLink').focus(); return; }
+  if (await addSong(null, $('ytAdd'), { youtube: link })) $('ytLink').value = '';
+};
+$('ytLink').addEventListener('keydown', e => { if (e.key === 'Enter') $('ytAdd').click(); });
+
+/* ---------- Queue + now playing ---------- */
+let dragging = false, queueDirty = false;
+function renderQueue() {
+  if (dragging) { queueDirty = true; return; } // redraw after the drop
+  const ul = $('queue');
+  ul.innerHTML = '';
+  $('qCount').hidden = !state.queue.length;
+  $('qCount').textContent = state.queue.length;
+  if (!state.queue.length) ul.innerHTML = '<li class="empty">The queue is empty. Add a song from the Songs tab.</li>';
+  state.queue.forEach((e, i) => {
+    const li = songRow(e.song);
+    li.querySelector('.num').textContent = `#${i + 1}`;
+    const singer = document.createElement('div');
+    singer.className = 's'; singer.textContent = e.singer;
+    li.querySelector('.txt').prepend(singer);
+    if (isMine(e)) li.classList.add('mine');
+    li.dataset.id = e.id;
+    if (state.queue.length > 1) {
+      const grip = document.createElement('button');
+      grip.className = 'grip'; grip.textContent = '⠿';
+      grip.title = 'Drag to reorder';
+      grip.setAttribute('aria-label', `Move ${e.song.title}: drag, or use the up and down arrow keys`);
+      grip.addEventListener('pointerdown', ev => startDrag(ev, li));
+      grip.addEventListener('keydown', ev => {
+        if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+        ev.preventDefault();
+        moveTo(e.id, Math.max(0, i + (ev.key === 'ArrowUp' ? -1 : 1)));
+      });
+      li.prepend(grip);
+    }
+    const rm = document.createElement('button');
+    rm.textContent = '×'; rm.title = 'Remove'; rm.setAttribute('aria-label', `Remove ${e.song.title}`);
+    rm.onclick = () => fetch(`/api/queue/${e.id}`, { method: 'DELETE' }).catch(() => toast('Could not remove it.'));
+    li.append(rm);
+    ul.append(li);
+  });
+}
+
+function moveTo(id, index) {
+  post(`/api/queue/${id}/move`, { index }).catch(err => toast(err.message));
+}
+
+// Drag and drop: the row follows your finger; the others make room as it passes them.
+function startDrag(ev, li) {
+  ev.preventDefault();
+  const ul = $('queue');
+  // Listen on the whole page: moving the row in the list would drop a capture held by its handle.
+  const from = [...ul.children].indexOf(li);
+  const grabOffset = ev.clientY - li.getBoundingClientRect().top;
+  let lastY = ev.clientY, scrollTimer = null;
+  dragging = true;
+  li.classList.add('dragging');
+
+  const place = () => {
+    li.style.transform = '';
+    const others = [...ul.children].filter(x => x !== li);
+    const before = others.find(x => { const r = x.getBoundingClientRect(); return lastY < r.top + r.height / 2; });
+    if (before) { if (li.nextElementSibling !== before) ul.insertBefore(li, before); }
+    else if (ul.lastElementChild !== li) ul.append(li);
+    li.style.transform = `translateY(${lastY - grabOffset - li.getBoundingClientRect().top}px)`;
+  };
+  // Scroll the page when dragging near the top or bottom of the screen.
+  const autoScroll = () => {
+    const edge = 70, h = window.innerHeight;
+    const dy = lastY < edge + 140 ? -8 : lastY > h - edge ? 8 : 0; // the pinned header covers the top
+    if (dy) { window.scrollBy(0, dy); place(); }
+  };
+  const move = e => { if (e.pointerId !== ev.pointerId) return; e.preventDefault(); lastY = e.clientY; place(); };
+  const end = e => {
+    if (e.pointerId !== ev.pointerId) return;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    clearInterval(scrollTimer);
+    li.classList.remove('dragging');
+    li.style.transform = '';
+    const to = [...ul.children].indexOf(li);
+    dragging = false;
+    if (to !== from) {
+      // show the new numbering straight away; the server's update confirms it
+      [...ul.children].forEach((x, k) => { const n = x.querySelector('.num'); if (n) n.textContent = `#${k + 1}`; });
+      moveTo(Number(li.dataset.id), to);
+    } else if (queueDirty) renderQueue();
+    queueDirty = false;
+  };
+  window.addEventListener('pointermove', move, { passive: false });
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  scrollTimer = setInterval(autoScroll, 16);
+}
+
+function renderNow() {
+  const n = state.nowPlaying, st = state.status || {};
+  if (n) {
+    $('nowWho').innerHTML = `${st.state === 'intro' ? 'Up next' : 'Now singing'}: <b></b>`;
+    $('nowWho').querySelector('b').textContent = n.singer;
+    $('nowWhat').textContent = n.song.artist ? `${n.song.title} · ${n.song.artist}` : n.song.title;
+  } else {
+    $('nowWho').textContent = 'Nothing playing';
+    $('nowWhat').textContent = state.queue.length ? 'Starting soon…' : 'Pick a song below to get things started.';
+  }
+  $('nowBar').style.width = n && st.duration ? `${(st.time / st.duration) * 100}%` : '0';
+  $('pauseBtn').textContent = st.state === 'paused' ? 'Resume' : 'Pause';
+  for (const b of ['pauseBtn', 'restartBtn', 'skipBtn']) $(b).disabled = !n;
+}
+
+$('pauseBtn').onclick = () => post('/api/control', { action: state.status?.state === 'paused' ? 'resume' : 'pause' }).catch(err => toast(err.message));
+$('restartBtn').onclick = () => post('/api/control', { action: 'restart' }).catch(err => toast(err.message));
+let skipArmed;
+$('skipBtn').onclick = () => {
+  if (!skipArmed) {
+    $('skipBtn').textContent = 'Tap to confirm'; $('skipBtn').classList.add('danger');
+    skipArmed = setTimeout(() => { skipArmed = null; $('skipBtn').textContent = 'Skip'; $('skipBtn').classList.remove('danger'); }, 3000);
+    return;
+  }
+  clearTimeout(skipArmed); skipArmed = null;
+  $('skipBtn').textContent = 'Skip'; $('skipBtn').classList.remove('danger');
+  post('/api/control', { action: 'skip' }).catch(err => toast(err.message));
+};
+
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onopen = () => $('offline').hidden = true;
+  es.onerror = () => $('offline').hidden = false;
+  es.addEventListener('state', e => {
+    const prevCount = state.songCount;
+    state = JSON.parse(e.data);
+    renderQueue(); renderNow(); checkMyTurn();
+    if (prevCount !== state.songCount) search();
+  });
+  es.addEventListener('status', e => { state.status = JSON.parse(e.data); renderNow(); });
+}
+
+/* ---------- "Your turn" alerts ----------
+   Phones using the same name as the singer get alerted while this page is open.
+   Android vibrates; iPhones can't vibrate from a web page, so they get the chime and banner. */
+let audioCtx = null;
+const notified = new Set();
+function unlockSound() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch {}
+}
+['touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockSound, { passive: true }));
+
+function chime(notes) {
+  if (!audioCtx) return;
+  try {
+    let t = audioCtx.currentTime;
+    for (const f of notes) {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(t); o.stop(t + 0.4);
+      t += 0.18;
+    }
+  } catch {}
+}
+const buzz = pattern => { try { navigator.vibrate?.(pattern); } catch {} };
+
+function checkMyTurn() {
+  if (!me()) return;
+  const n = state.nowPlaying, next = state.queue[0];
+  if (n && isMine(n) && !notified.has(`turn:${n.id}`)) {
+    notified.add(`turn:${n.id}`); notified.add(`next:${n.id}`);
+    $('alertTitle').textContent = `Your turn, ${n.singer}!`;
+    $('alertSong').textContent = n.song.artist ? `${n.song.title} · ${n.song.artist}` : n.song.title;
+    $('alert').hidden = false;
+    buzz([400, 150, 400, 150, 600]);
+    chime([660, 880, 1320]);
+  } else if (next && isMine(next) && !(n && isMine(n)) && !notified.has(`next:${next.id}`)) {
+    notified.add(`next:${next.id}`);
+    buzz([200]);
+    chime([660, 880]);
+    toast(`You're up next: ${next.song.title}`);
+  }
+}
+$('alertOk').onclick = () => { $('alert').hidden = true; buzz(0); };
+
+fetch('/api/info').then(r => r.json()).then(info => { $('tabYt').hidden = !info.youtube; }).catch(() => {});
+
+connect();
+search();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "karaoke-night",
+  "version": "1.0.0",
+  "description": "Home karaoke machine: MP3+CDG player on the TV, song requests from any phone on the Wi-Fi.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

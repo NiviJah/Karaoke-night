@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Karaoke Night · TV</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;600;800&display=swap">
+<style>
+:root {
+  --bg: #000; --panel: #100e1c; --line: #2d2950; --fg: #ece9fb; --muted: #9a94c2;
+  --accent: #ffb547; --accent-ink: #241600;
+  --display: "Bungee", "Impact", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 18px/1.4 var(--body); display: flex; flex-direction: column; overflow: hidden; cursor: default; }
+.stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+canvas { max-width: 100%; max-height: 100%; aspect-ratio: 300 / 216; width: auto; height: 100%; display: block; }
+.stage.pixel canvas { image-rendering: pixelated; }
+
+.card { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 2.5vh; padding: 4vh 6vw;
+  background: radial-gradient(ellipse at 50% 30%, #241d52 0%, #0b0918 70%); }
+.card[hidden] { display: none; }
+.brand { font: 6vh/1 var(--display); color: var(--accent); margin: 0; }
+.big { font: 800 9vh/1.05 var(--body); margin: 0; text-wrap: balance; }
+.mid { font: 600 4.5vh/1.2 var(--body); margin: 0; text-wrap: balance; }
+.dim { color: var(--muted); font-size: 3vh; margin: 0; }
+.url { font: 800 6vh/1.1 var(--body); color: var(--accent); overflow-wrap: anywhere; }
+.count { font: 14vh/1 var(--display); color: var(--accent); }
+.label { text-transform: uppercase; letter-spacing: .14em; font-size: 2.4vh; color: var(--muted); }
+
+#start { cursor: pointer; }
+#start button { justify-self: center; font: 800 4vh var(--body); background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 1.2vh; padding: 2vh 5vh; cursor: pointer; }
+
+.bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 1vh 4vh; padding: 1.4vh 3vh; background: var(--panel); border-top: 1px solid var(--line); font-size: 2.6vh; }
+.bar .next { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar b { color: var(--accent); font-weight: 800; }
+.bar .join { color: var(--muted); }
+.bar .join span { color: var(--fg); font-weight: 600; }
+.qr { image-rendering: pixelated; background: #fff; border-radius: 1vh; display: block; }
+#idleQr { height: 34vh; width: 34vh; justify-self: center; }
+.introJoin { position: absolute; right: 3vh; bottom: 3vh; display: grid; gap: 1vh; justify-items: center; color: var(--muted); font-size: 2.2vh; }
+#introQr { height: 16vh; width: 16vh; }
+#barQr { height: 7vh; width: 7vh; border-radius: .6vh; }
+.bar .join { display: flex; align-items: center; gap: 1.6vh; }
+#setup { z-index: 3; place-content: start center; padding-top: 6vh; cursor: auto; }
+#setup .box { width: min(90vw, 1000px); display: grid; gap: 1.6vh; text-align: left; }
+#setup .path { font: 600 2.6vh var(--body); background: var(--panel); border: 1px solid var(--line); border-radius: 1vh; padding: 1.4vh 1.8vh; overflow-wrap: anywhere; }
+#setup .list { display: grid; gap: .6vh; max-height: 42vh; overflow-y: auto; }
+#setup .list button, #setup .row button { font: 600 2.4vh var(--body); text-align: left; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 1vh; padding: 1.2vh 1.8vh; cursor: pointer; }
+#setup .list button:hover, #setup .list button:focus-visible { border-color: var(--accent); outline: none; }
+#setup .row { display: flex; flex-wrap: wrap; gap: 1.2vh; align-items: center; }
+#setup .row .use { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#setup .msg { font-size: 2.4vh; color: var(--muted); margin: 0; min-height: 1.4em; }
+#setup .msg.err { color: #ff7a8a; }
+#vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+#ytWrap { position: absolute; inset: 0; background: #000; }
+#ytWrap iframe, #ytWrap > div { width: 100%; height: 100%; border: 0; display: block; }
+.progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: transparent; }
+.progress i { display: block; height: 100%; width: 0; background: var(--accent); opacity: .8; }
+.toast { position: absolute; top: 3vh; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); padding: 1.2vh 2.4vh; border-radius: 1vh; font-size: 2.4vh; }
+.paused { position: absolute; top: 3vh; right: 3vh; font: 3vh var(--display); color: var(--accent); background: rgb(0 0 0 / .6); padding: 1vh 2vh; border-radius: 1vh; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <canvas id="screen" width="1200" height="864"></canvas>
+  <video id="vid" playsinline preload="auto" hidden></video>
+  <div id="ytWrap" hidden><div id="yt"></div></div>
+
+  <div class="card" id="idle" hidden>
+    <p class="brand">Karaoke Night</p>
+    <p class="mid">Scan with your phone camera to pick a song</p>
+    <canvas class="qr" id="idleQr" aria-label="QR code for the song request page"></canvas>
+    <p class="dim">or go to <span class="url" id="idleUrl" style="font-size:4vh">…</span></p>
+    <p class="dim">Phones must be on the same Wi-Fi as this TV. <span id="idleCount"></span></p>
+  </div>
+
+  <div class="card" id="intro" hidden>
+    <span class="label">Up next</span>
+    <p class="big" id="introSinger"></p>
+    <p class="mid" id="introSong"></p>
+    <div class="count" id="introCount"></div>
+    <p class="dim" id="introNote">Press Enter to start now</p>
+    <div class="introJoin"><canvas class="qr" id="introQr" aria-label="QR code for the song request page"></canvas>Scan to add a song</div>
+  </div>
+
+  <div class="card" id="start">
+    <p class="brand">Karaoke Night</p>
+    <p class="mid">Click to start the show</p>
+    <button id="startBtn">Start</button>
+    <p class="dim">Browsers only play sound after a click. Keys: Space pause · N skip · F full screen · L lyrics look · [ ] lyric sync · S songs folder</p>
+  </div>
+
+  <div class="card" id="setup" hidden>
+    <div class="box">
+      <p class="brand" style="font-size:4.5vh">Choose your songs folder</p>
+      <p class="dim">Open the drive or folder that holds your karaoke files, then click <b>Use this folder</b>. Every folder inside it is searched too.</p>
+      <div class="path" id="setupPath">Drives</div>
+      <div class="row">
+        <button id="setupUp">↑ Up one level</button>
+        <button class="use" id="setupUse">Use this folder</button>
+        <button id="setupClose" hidden>Close</button>
+      </div>
+      <p class="msg" id="setupMsg"></p>
+      <div class="list" id="setupList"></div>
+    </div>
+  </div>
+
+  <div class="paused" id="pausedTag" hidden>Paused</div>
+  <div class="toast" id="toast" hidden></div>
+  <div class="progress"><i id="prog"></i></div>
+</div>
+
+<div class="bar">
+  <div class="next" id="next">Queue is empty</div>
+  <div class="join"><span>Add songs: <span id="joinUrl">…</span></span><canvas class="qr" id="barQr" aria-label="QR code for the song request page"></canvas></div>
+</div>
+
+<script src="/cdg.js"></script>
+<script src="/qrcode.js"></script>
+<script>
+const INTRO_SECONDS = 8;
+const $ = id => document.getElementById(id);
+const canvas = $('screen'), ctx = canvas.getContext('2d');
+const cdg = new CDG();
+const audio = new Audio();
+audio.preload = 'auto';
+
+let kind = null; // what is playing: 'cdg', 'video' or 'yt'
+const vid = document.getElementById('vid');
+let started = false, mode = 'idle', token = 0, current = null, state = null, loaded = false, skipWait = null, skipIntro = false;
+let syncMs = 0, look = 'smooth';
+try { syncMs = Number(localStorage.getItem('syncMs')) || 0; look = localStorage.getItem('look') || 'smooth'; } catch {}
+
+/* ---------- Drawing ---------- */
+const idx1 = new Uint8Array(300 * 216), idx2 = new Uint8Array(600 * 432), idx4 = new Uint8Array(1200 * 864);
+let img, img32;
+function setLook(v) {
+  look = v;
+  const k = v === 'smooth' ? 4 : 1;
+  canvas.width = 300 * k; canvas.height = 216 * k;
+  img = ctx.createImageData(canvas.width, canvas.height); img32 = new Uint32Array(img.data.buffer);
+  $('stage').classList.toggle('pixel', v === 'pixel');
+  cdg.dirty = true;
+  if (!loaded) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+  try { localStorage.setItem('look', v); } catch {}
+}
+function paint() {
+  cdg.render(idx1);
+  let src = idx1;
+  if (look === 'smooth') { scale2x(idx1, 300, 216, idx2); scale2x(idx2, 600, 432, idx4); src = idx4; }
+  const pal = cdg.pal;
+  for (let i = 0, n = src.length; i < n; i++) img32[i] = pal[src[i]];
+  ctx.putImageData(img, 0, 0);
+}
+function frame() {
+  if (loaded) {
+    cdg.advanceTo(Math.max(0, Math.floor((audio.currentTime + syncMs / 1000) * 300)));
+    if (cdg.dirty) paint();
+    $('prog').style.width = audio.duration ? `${(audio.currentTime / audio.duration) * 100}%` : '0';
+  } else if ((kind === 'yt' || kind === 'video') && mode === 'playing') {
+    const d = media.duration();
+    $('prog').style.width = d ? `${(media.time() / d) * 100}%` : '0';
+  }
+  requestAnimationFrame(frame);
+}
+
+// Draws a QR code with a white quiet zone; CSS scales it up crisply.
+function drawQR(cv, text) {
+  const qr = qrcode(0, 'M');
+  qr.addData(text); qr.make();
+  const n = qr.getModuleCount(), quiet = 2, s = 8;
+  cv.width = cv.height = (n + quiet * 2) * s;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#000';
+  for (let r = 0; r < n; r++) for (let col = 0; col < n; col++)
+    if (qr.isDark(r, col)) c.fillRect((col + quiet) * s, (r + quiet) * s, s, s);
+}
+
+let toastTimer;
+function toast(text, ms = 3000) {
+  $('toast').textContent = text; $('toast').hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, ms);
+}
+
+/* ---------- Server ---------- */
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json());
+const songLine = s => s.artist ? `${s.title} · ${s.artist}` : s.title;
+
+function renderBar() {
+  const q = state?.queue || [];
+  $('next').innerHTML = '';
+  if (!q.length) { $('next').textContent = 'Queue is empty'; return; }
+  q.slice(0, 3).forEach((e, i) => {
+    const span = document.createElement('span');
+    span.innerHTML = `${i ? ' &nbsp;·&nbsp; ' : 'Next: '}<b></b> `;
+    span.querySelector('b').textContent = e.singer;
+    span.append(songLine(e.song));
+    $('next').append(span);
+  });
+  if (q.length > 3) $('next').append(` · +${q.length - 3} more`);
+}
+
+/* ---------- YouTube ---------- */
+let yt = null, ytApi = null;
+function loadYouTubeApi() {
+  if (!ytApi) {
+    ytApi = new Promise((resolve, reject) => {
+      window.onYouTubeIframeAPIReady = resolve;
+      const sc = document.createElement('script');
+      sc.src = 'https://www.youtube.com/iframe_api';
+      sc.onerror = () => reject(new Error('offline'));
+      document.head.append(sc);
+      setTimeout(() => reject(new Error('timeout')), 15000);
+    }).catch(err => { ytApi = null; throw err; });
+  }
+  return ytApi;
+}
+async function playYouTube(id, my) {
+  await loadYouTubeApi();
+  if (my !== token) return;
+  $('ytWrap').hidden = false;
+  if (yt) { yt.loadVideoById(id); }
+  else {
+    await new Promise(resolve => {
+      yt = new YT.Player('yt', {
+        videoId: id, width: '100%', height: '100%',
+        playerVars: { autoplay: 1, controls: 0, rel: 0, playsinline: 1, iv_load_policy: 3, origin: location.origin },
+        events: { onReady: () => { yt.playVideo(); resolve(); }, onStateChange: ytState, onError: ytError },
+      });
+    });
+  }
+  // If the browser blocked autoplay, the video sits unstarted.
+  setTimeout(() => {
+    if (my === token && kind === 'yt' && [-1, 5].includes(yt?.getPlayerState?.())) toast('Press Space to start the video.');
+  }, 6000);
+}
+function ytState(e) {
+  if (kind !== 'yt' || mode !== 'playing') return;
+  if (e.data === YT.PlayerState.ENDED) advance();
+  else $('pausedTag').hidden = e.data !== YT.PlayerState.PAUSED;
+}
+function ytError(e) {
+  if (kind !== 'yt' || mode !== 'playing') return;
+  const why = e.data === 101 || e.data === 150 ? "isn't allowed to play outside YouTube" : "can't be played";
+  toast(`"${current?.song.title}" ${why}. Skipping it.`);
+  const my = token; setTimeout(() => { if (my === token) advance(); }, 3000);
+}
+function stopYouTube() {
+  try { yt?.stopVideo(); } catch {}
+  $('ytWrap').hidden = true;
+}
+
+// One set of controls for whichever kind of song is playing.
+const el = () => kind === 'video' ? vid : audio; // the <audio>/<video> element in use
+const media = {
+  paused: () => kind === 'yt' ? yt?.getPlayerState?.() !== 1 : el().paused,
+  play: () => kind === 'yt' ? yt?.playVideo() : el().play().catch(() => {}),
+  pause: () => kind === 'yt' ? yt?.pauseVideo() : el().pause(),
+  restart: () => {
+    if (kind === 'yt') { yt?.seekTo(0, true); yt?.playVideo(); }
+    else { el().currentTime = 0; el().play().catch(() => {}); }
+  },
+  time: () => kind === 'yt' ? (yt?.getCurrentTime?.() || 0) : (el().currentTime || 0),
+  duration: () => kind === 'yt' ? (yt?.getDuration?.() || 0) : (el().duration || 0),
+};
+
+function stopVideo() {
+  vid.pause();
+  vid.removeAttribute('src'); vid.load();
+  vid.hidden = true;
+}
+
+function showOnly(id) { for (const c of ['idle', 'intro', 'start']) $(c).hidden = c !== id; }
+
+function wait(ms) {
+  return new Promise(resolve => {
+    const t = setTimeout(() => resolve(false), ms);
+    skipWait = () => { clearTimeout(t); resolve(true); };
+  });
+}
+
+async function advance() {
+  const my = ++token;
+  audio.pause(); stopVideo(); stopYouTube(); kind = null; loaded = false; mode = 'loading'; $('pausedTag').hidden = true;
+  let r;
+  try { r = await post('/api/player/next'); } catch { toast('Lost contact with the server.'); mode = 'idle'; return; }
+  if (my !== token) return;
+  current = r.nowPlaying;
+  if (!current) { mode = 'idle'; showOnly('idle'); return; }
+
+  mode = 'intro'; skipIntro = false;
+  $('introSinger').textContent = current.singer;
+  $('introSong').textContent = songLine(current.song);
+  showOnly('intro');
+  const isYt = !!current.song.youtube, isVideo = current.song.kind === 'video';
+  $('introNote').textContent = 'Press Enter to start now';
+  // Videos: check the sound first. If it's a format browsers play silently, the server converts it (needs ffmpeg).
+  const getSound = () => fetch(`/api/sound/${current.song.key}`).then(r => r.json()).catch(() => ({ state: 'not-needed' }));
+  let sound = isVideo ? await getSound() : null;
+  if (my !== token) return;
+  if (isVideo && ['not-needed', 'ready'].includes(sound.state)) vid.src = `/media/${current.song.key}/video`; // buffer during the countdown
+  const cdgReq = isYt || isVideo ? null : fetch(`/media/${current.song.key}/cdg`).then(res => { if (!res.ok) throw new Error(); return res.arrayBuffer(); });
+  cdgReq?.catch(() => {});
+  for (let n = INTRO_SECONDS; n > 0 && !skipIntro; n--) {
+    $('introCount').textContent = n;
+    await wait(1000);
+    if (my !== token) return;
+  }
+  skipWait = null;
+
+  if (isVideo) {
+    if (['pending', 'converting'].includes(sound.state)) {
+      $('introNote').textContent = 'Getting the sound ready…';
+      for (let i = 0; i < 300 && ['pending', 'converting'].includes(sound.state); i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        if (my !== token) return;
+        sound = await getSound();
+        if (my !== token) return;
+      }
+    }
+    if (!vid.getAttribute('src')) vid.src = `/media/${current.song.key}/video`;
+    if (sound.state === 'unavailable') {
+      toast(`This video's sound (${sound.format}) won't play in a browser. Install ffmpeg on this computer so the app can fix it. See the README.`, 9000);
+    } else if (sound.state === 'failed') {
+      toast(`Couldn't fix this video's sound (${sound.format}): ${sound.error}`, 9000);
+    }
+    if (vid.error) {
+      toast(`Couldn't play the video "${current.song.title}". This browser may not support its format. Skipping it.`);
+      setTimeout(() => { if (my === token) advance(); }, 3000);
+      return;
+    }
+    kind = 'video'; mode = 'playing';
+    showOnly(null);
+    vid.hidden = false;
+    vid.play().catch(() => toast('Playback was blocked. Press Space.'));
+    // Chrome/Edge can tell us if no sound is actually coming out (an unsupported sound format plays silently).
+    setTimeout(() => {
+      if (my === token && kind === 'video' && !vid.paused && vid.currentTime > 2 && !vid.muted
+          && 'webkitAudioDecodedByteCount' in vid && vid.webkitAudioDecodedByteCount === 0 && sound.state === 'not-needed') {
+        toast(`No sound is coming from this video. Its sound format${sound.format ? ` (${sound.format})` : ''} may not play in this browser.`, 9000);
+      }
+    }, 4000);
+    return;
+  }
+
+  if (isYt) {
+    kind = 'yt'; mode = 'playing';
+    showOnly(null);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    try { await playYouTube(current.song.youtube, my); }
+    catch {
+      if (my !== token) return;
+      toast("Can't reach YouTube. Is this computer online? Skipping it.");
+      setTimeout(() => { if (my === token) advance(); }, 3000);
+    }
+    return;
+  }
+
+  try {
+    cdg.load(await cdgReq);
+  } catch {
+    if (my !== token) return;
+    toast(`Couldn't load "${current.song.title}". Skipping it.`);
+    setTimeout(() => { if (my === token) advance(); }, 2500);
+    return;
+  }
+  if (my !== token) return;
+  audio.src = `/media/${current.song.key}/audio`;
+  kind = 'cdg'; loaded = true; mode = 'playing';
+  showOnly(null);
+  audio.play().catch(() => toast('Playback was blocked. Press Space.'));
+}
+
+function report() {
+  if (!started) return;
+  const s = mode === 'playing' ? (media.paused() ? 'paused' : 'playing') : mode;
+  post('/api/player/status', { state: s, time: media.time(), duration: media.duration() }).catch(() => {});
+}
+setInterval(report, 1000);
+
+function command(action) {
+  if (!started) return;
+  if (action === 'skip') advance();
+  else if (mode !== 'playing') return;
+  else if (action === 'pause') media.pause();
+  else if (action === 'resume') media.play();
+  else if (action === 'restart') media.restart();
+}
+
+for (const [elem, k, what] of [[audio, 'cdg', 'the audio for'], [vid, 'video', 'the video']]) {
+  elem.addEventListener('ended', () => { if (kind === k && mode === 'playing') advance(); });
+  elem.addEventListener('pause', () => { if (kind === k && mode === 'playing' && !elem.ended) $('pausedTag').hidden = false; });
+  elem.addEventListener('play', () => $('pausedTag').hidden = true);
+  elem.addEventListener('error', () => {
+    if (kind !== k || mode !== 'playing') return;
+    toast(`Couldn't play ${what} "${current?.song.title}". This browser may not support its format. Skipping it.`);
+    const my = token; setTimeout(() => { if (my === token) advance(); }, 3000);
+  });
+}
+
+function connect() {
+  const es = new EventSource('/api/events');
+  es.addEventListener('state', e => {
+    state = JSON.parse(e.data);
+    renderBar();
+    $('idleCount').textContent = state.songCount ? `${state.songCount.toLocaleString()} songs ready.` : (state.scanning ? 'Looking for songs…' : 'No songs found yet.');
+    if (started && mode === 'idle' && state.queue.length) advance();
+    if (state.setupNeeded && $('setup').hidden) openSetup();
+  });
+  es.addEventListener('command', e => command(JSON.parse(e.data).action));
+}
+
+fetch('/api/info').then(r => r.json()).then(info => {
+  $('idleUrl').textContent = info.urls[0];
+  $('joinUrl').textContent = info.urls[0].replace(/^http:\/\//, '');
+  for (const id of ['idleQr', 'introQr', 'barQr']) drawQR($(id), info.urls[0]);
+}).catch(() => {});
+
+/* ---------- Setup: choose the songs folder ---------- */
+let browseDir = '', browseParent = null;
+const setupMsg = (t, err) => { $('setupMsg').textContent = t; $('setupMsg').classList.toggle('err', !!err); };
+
+async function browseTo(dir) {
+  const r = await fetch(`/api/browse?dir=${encodeURIComponent(dir)}`);
+  const j = await r.json();
+  if (!r.ok) { setupMsg(j.error, true); return; }
+  browseDir = j.dir; browseParent = j.parent;
+  $('setupPath').textContent = j.dir || 'Drives';
+  $('setupUp').disabled = j.parent === null;
+  $('setupUse').disabled = !j.dir;
+  setupMsg(j.dir ? (j.songFiles ? `${j.songFiles} song files right here, plus whatever is in the folders below.` : 'Click a folder to open it, or use this one.') : 'Pick a drive.');
+  const list = $('setupList');
+  list.innerHTML = '';
+  for (const f of j.folders) {
+    const b = document.createElement('button');
+    b.textContent = `${f.name}  ›`;
+    b.onclick = () => browseTo(f.path);
+    list.append(b);
+  }
+  if (!j.folders.length) list.innerHTML = '<p class="dim">No folders inside this one.</p>';
+}
+
+async function openSetup() {
+  const s = await fetch('/api/settings').then(r => r.json()).catch(() => null);
+  if (!s || s.error) return; // not on the server computer
+  $('setup').hidden = false;
+  $('setupClose').hidden = !s.ok;
+  await browseTo(s.ok ? s.songDir : '');
+  if (s.songDir && !s.ok) setupMsg(`Can't find ${s.songDir} (set by ${s.source}). Is the drive plugged in? Choose the folder below.`, true);
+}
+
+$('setupUp').onclick = () => browseTo(browseParent || '');
+$('setupClose').onclick = () => { $('setup').hidden = true; };
+$('setupUse').onclick = async () => {
+  setupMsg('Looking for songs…');
+  const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ songDir: browseDir }) });
+  const j = await r.json();
+  if (!r.ok) { setupMsg(j.error, true); return; }
+  if (!j.songCount) { setupMsg(`No MP3 + CDG pairs found in ${j.songDir} or its folders. Pick another folder.`, true); $('setupClose').hidden = false; return; }
+  $('setup').hidden = true;
+  toast(`Found ${j.songCount.toLocaleString()} songs`);
+};
+
+/* ---------- Start + keys ---------- */
+function start() {
+  if (started) return;
+  started = true;
+  showOnly('idle');
+  document.documentElement.requestFullscreen?.().catch(() => {});
+  // Prime audio playback with the click so later songs can start on their own.
+  audio.play().catch(() => {});
+  vid.play().catch(() => {}); // Safari allows sound per player, so unlock the video player with this click too
+  if (state?.queue.length) advance();
+}
+$('start').addEventListener('click', start);
+
+document.addEventListener('keydown', e => {
+  if (!$('setup').hidden) { if (e.key === 'Escape' && !$('setupClose').hidden) $('setup').hidden = true; return; }
+  if (e.key === 's' || e.key === 'S') { openSetup(); return; }
+  if (!started) { if (e.key === 'Enter' || e.key === ' ') start(); return; }
+  if (e.key === ' ') { e.preventDefault(); if (mode === 'playing') media.paused() ? media.play() : media.pause(); }
+  else if (e.key === 'Enter' && mode === 'intro') { skipIntro = true; if (typeof skipWait === 'function') skipWait(); }
+  else if (e.key === 'n' || e.key === 'N') advance();
+  else if (e.key === 'f' || e.key === 'F') {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+  else if (e.key === 'l' || e.key === 'L') { const looks = ['smooth', 'soft', 'pixel']; setLook(looks[(looks.indexOf(look) + 1) % 3]); toast(`Lyrics look: ${look}`); }
+  else if (e.key === '[' || e.key === ']') {
+    syncMs += e.key === ']' ? 50 : -50;
+    try { localStorage.setItem('syncMs', syncMs); } catch {}
+    toast(`Lyric sync: ${syncMs > 0 ? '+' : ''}${syncMs} ms`);
+  }
+});
+
+setLook(look);
+connect();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

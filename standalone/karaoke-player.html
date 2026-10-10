@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Karaoke Night</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: a single dark "stage" — screen + transport on the left, song queue on the right, stacking on phones. */
+:root {
+  --bg: #100e1c;
+  --panel: #1a1730;
+  --line: #2d2950;
+  --fg: #ece9fb;
+  --muted: #9a94c2;
+  --accent: #ffb547;
+  --accent-ink: #241600;
+  --warn: #ff7a8a;
+  --display: "Bungee", "Impact", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1200px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 32px; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font: 28px/1 var(--display); margin: 0; color: var(--accent); letter-spacing: .02em; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 14px; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { background: #000; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid var(--line); }
+.stage canvas { display: block; width: 100%; height: auto; aspect-ratio: 300 / 216; max-width: 100%; }
+.stage.sharp canvas { image-rendering: pixelated; }
+.stage:fullscreen { display: flex; align-items: center; justify-content: center; border: 0; border-radius: 0; }
+.stage:fullscreen canvas { width: auto; height: 100%; max-height: 100vh; max-width: 100vw; }
+.stage.drag::after { content: "Drop to add songs"; position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgb(16 14 28 / .85); color: var(--accent); font: 22px var(--display); border: 3px dashed var(--accent); border-radius: 10px; }
+
+.transport { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.now { font-weight: 700; min-width: 0; overflow-wrap: anywhere; flex: 1 1 200px; }
+.time { font: 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+input[type=range] { accent-color: var(--accent); }
+#seek { flex: 1 1 240px; min-width: 0; }
+button { font: 600 14px var(--body); color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 84px; }
+button:disabled { opacity: .4; cursor: default; }
+.ctl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.ctl input[type=range] { width: 110px; }
+.ctl output { font: 12px var(--mono); color: var(--fg); min-width: 52px; font-variant-numeric: tabular-nums; }
+.ctl input[type=checkbox] { accent-color: var(--accent); }
+.ctl select { font: 13px var(--body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+aside h2 { font: 15px var(--display); margin: 0; letter-spacing: .04em; color: var(--fg); }
+label.btn { display: block; text-align: center; font-weight: 700; background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 10px; cursor: pointer; }
+label.btn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 52vh; overflow-y: auto; }
+ol li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+ol li:hover { background: rgb(255 255 255 / .04); }
+ol li.on { border-color: var(--accent); }
+ol li .n { font: 12px var(--mono); color: var(--muted); width: 22px; flex: none; font-variant-numeric: tabular-nums; }
+ol li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+ol li .x { border: 0; padding: 2px 6px; color: var(--muted); font-size: 16px; line-height: 1; }
+.empty { color: var(--muted); font-size: 14px; padding: 8px 2px; }
+.msg { font-size: 13px; color: var(--warn); min-height: 1em; margin: 0; overflow-wrap: anywhere; }
+.keys { color: var(--muted); font-size: 12px; }
+kbd { font: 11px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--fg); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Karaoke Night</h1>
+    <span class="sub">MP3 + CDG player. Your files never leave this browser.</span>
+  </header>
+
+  <main>
+    <section style="display:grid;gap:12px;min-width:0">
+      <div class="stage" id="stage">
+        <canvas id="screen" width="300" height="216" aria-label="Karaoke lyrics screen"></canvas>
+      </div>
+
+      <div class="transport">
+        <div class="row">
+          <button class="primary" id="play" disabled>Play</button>
+          <button id="prev" disabled title="Previous song">Prev</button>
+          <button id="next" disabled title="Next song">Next</button>
+          <span class="now" id="now">No song loaded</span>
+          <button id="fs" title="Full screen (F)">Full screen</button>
+        </div>
+        <div class="row">
+          <span class="time" id="cur">0:00</span>
+          <input type="range" id="seek" min="0" max="1000" value="0" step="1" disabled aria-label="Seek">
+          <span class="time" id="dur">0:00</span>
+        </div>
+        <div class="row">
+          <label class="ctl" for="vol">Volume <input type="range" id="vol" min="0" max="1" step="0.01" value="1"></label>
+          <label class="ctl" for="sync">Lyric sync <input type="range" id="sync" min="-1000" max="1000" step="10" value="0"><output id="syncOut">0 ms</output></label>
+          <label class="ctl" for="style">Lyrics look
+            <select id="style">
+              <option value="smooth" selected>Smooth</option>
+              <option value="soft">Soft</option>
+              <option value="pixel">Pixel</option>
+            </select></label>
+          <label class="ctl" for="auto"><input type="checkbox" id="auto" checked> Auto-play next</label>
+        </div>
+      </div>
+    </section>
+
+    <aside>
+      <h2>Song queue</h2>
+      <label class="btn" for="pick">Add songs
+        <input type="file" id="pick" multiple accept=".mp3,.cdg,.zip,.ogg,.m4a,.wav,.flac,audio/*">
+      </label>
+      <p class="hint">Pick or drop matching pairs like <b>Song.mp3</b> + <b>Song.cdg</b>, or a <b>.zip</b> that holds them. Whole folders' worth at once is fine.</p>
+      <p class="msg" id="msg" role="status"></p>
+      <ol id="queue"></ol>
+      <div class="keys"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> 5 s · <kbd>F</kbd> full screen · <kbd>N</kbd> next</div>
+    </aside>
+  </main>
+</div>
+
+<script>
+/* ---------- CD+G decoder ----------
+   A .cdg file is a stream of 24-byte packets played at 300 packets/second.
+   The screen is 300x216 pixels with a 16-color palette; the safe area is 288x192. */
+class CDG {
+  constructor() {
+    this.W = 300; this.H = 216;
+    this.vram = new Uint8Array(this.W * this.H);
+    this.pal = new Uint32Array(16);
+    this.data = new Uint8Array(0);
+    this.reset();
+  }
+  load(buf) { this.data = new Uint8Array(buf); this.reset(); }
+  reset() {
+    this.vram.fill(0); this.pal.fill(0xff000000);
+    this.hOff = 0; this.vOff = 0; this.pos = 0; this.dirty = true;
+  }
+  get packets() { return (this.data.length / 24) | 0; }
+  advanceTo(n) {
+    if (n < this.pos) this.reset();            // seeking backwards: replay from the start
+    const end = Math.min(n, this.packets);
+    for (; this.pos < end; this.pos++) this.exec(this.pos * 24);
+  }
+  exec(o) {
+    const d = this.data;
+    if ((d[o] & 0x3f) !== 0x09) return;          // not a CD+G command
+    const ins = d[o + 1] & 0x3f, p = o + 4;
+    switch (ins) {
+      case 1:  this.vram.fill(d[p] & 15); this.dirty = true; break;                 // memory preset
+      case 2:  this.border(d[p] & 15); break;                                         // border preset
+      case 6:  this.tile(p, false); break;                                            // tile block
+      case 38: this.tile(p, true); break;                                             // tile block XOR
+      case 20: this.scroll(p, false); break;                                          // scroll preset
+      case 24: this.scroll(p, true); break;                                           // scroll copy
+      case 30: this.palette(p, 0); break;                                             // colors 0-7
+      case 31: this.palette(p, 8); break;                                             // colors 8-15
+    }
+  }
+  border(c) {
+    const { W, H, vram } = this;
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (x < 6 || x >= 294 || y < 12 || y >= 204) vram[y * W + x] = c;
+    this.dirty = true;
+  }
+  tile(p, xor) {
+    const d = this.data, c0 = d[p] & 15, c1 = d[p + 1] & 15;
+    const row = d[p + 2] & 31, col = d[p + 3] & 63;
+    if (row >= 18 || col >= 50) return;
+    const x0 = col * 6, y0 = row * 12, vram = this.vram;
+    for (let y = 0; y < 12; y++) {
+      const bits = d[p + 4 + y] & 63, base = (y0 + y) * 300 + x0;
+      for (let x = 0; x < 6; x++) {
+        const c = (bits >> (5 - x)) & 1 ? c1 : c0;
+        if (xor) vram[base + x] ^= c; else vram[base + x] = c;
+      }
+    }
+    this.dirty = true;
+  }
+  scroll(p, copy) {
+    const d = this.data, color = d[p] & 15, hs = d[p + 1] & 63, vs = d[p + 2] & 63;
+    const hCmd = (hs & 0x30) >> 4, vCmd = (vs & 0x30) >> 4;
+    this.hOff = Math.min(hs & 7, 5); this.vOff = Math.min(vs & 15, 11);
+    const dx = hCmd === 1 ? 6 : hCmd === 2 ? -6 : 0;
+    const dy = vCmd === 1 ? 12 : vCmd === 2 ? -12 : 0;
+    if (dx || dy) {
+      const { W, H } = this, src = this.vram.slice(), dst = this.vram;
+      for (let y = 0; y < H; y++) {
+        let sy = y - dy;
+        if (copy) sy = (sy + H) % H;
+        for (let x = 0; x < W; x++) {
+          let sx = x - dx;
+          if (copy) sx = (sx + W) % W;
+          dst[y * W + x] = (sx < 0 || sx >= W || sy < 0 || sy >= H) ? color : src[sy * W + sx];
+        }
+      }
+    }
+    this.dirty = true;
+  }
+  palette(p, base) {
+    const d = this.data;
+    for (let i = 0; i < 8; i++) {
+      const hi = d[p + 2 * i] & 63, lo = d[p + 2 * i + 1] & 63;
+      const r = (hi >> 2) & 15, g = ((hi & 3) << 2) | ((lo >> 4) & 3), b = lo & 15;
+      this.pal[base + i] = 0xff000000 | (b * 17 << 16) | (g * 17 << 8) | (r * 17);
+    }
+    this.dirty = true;
+  }
+  // Writes the visible screen (with fine-scroll offsets applied) as palette indices.
+  render(out) {
+    const { W, H, vram, hOff, vOff } = this;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let i;
+        if (x < 6 || x >= 294 || y < 12 || y >= 204) i = y * W + x;
+        else i = Math.min(y + vOff, H - 1) * W + Math.min(x + hOff, W - 1);
+        out[y * W + x] = vram[i];
+      }
+    }
+    this.dirty = false;
+  }
+}
+
+/* Scale2x (EPX): doubles an indexed image and rounds off stair-step edges.
+   Run twice for 4x, which turns blocky CDG lettering into smooth curves. */
+function scale2x(src, w, h, dst) {
+  const W2 = w * 2;
+  for (let y = 0; y < h; y++) {
+    const up = (y > 0 ? y - 1 : y) * w, row = y * w, dn = (y < h - 1 ? y + 1 : y) * w;
+    for (let x = 0; x < w; x++) {
+      const l = x > 0 ? x - 1 : x, r = x < w - 1 ? x + 1 : x;
+      const B = src[up + x], D = src[row + l], E = src[row + x], F = src[row + r], H = src[dn + x];
+      const o = (y * 2) * W2 + x * 2;
+      if (B !== H && D !== F) {
+        dst[o]          = D === B ? D : E;
+        dst[o + 1]      = B === F ? F : E;
+        dst[o + W2]     = D === H ? D : E;
+        dst[o + W2 + 1] = H === F ? F : E;
+      } else {
+        dst[o] = dst[o + 1] = dst[o + W2] = dst[o + W2 + 1] = E;
+      }
+    }
+  }
+}
+
+/* ---------- Player ---------- */
+const $ = id => document.getElementById(id);
+const canvas = $('screen'), ctx = canvas.getContext('2d');
+const idx1 = new Uint8Array(300 * 216), idx2 = new Uint8Array(600 * 432), idx4 = new Uint8Array(1200 * 864);
+let look = 'smooth', img, img32;
+function setLook(v) {
+  look = v;
+  const k = v === 'smooth' ? 4 : 1;
+  canvas.width = 300 * k; canvas.height = 216 * k;
+  img = ctx.createImageData(canvas.width, canvas.height); img32 = new Uint32Array(img.data.buffer);
+  $('stage').classList.toggle('sharp', v === 'pixel');
+  cdg.dirty = true;
+  if (!loaded) idleScreen();
+}
+function paint() {
+  cdg.render(idx1);
+  let src = idx1;
+  if (look === 'smooth') { scale2x(idx1, 300, 216, idx2); scale2x(idx2, 600, 432, idx4); src = idx4; }
+  const pal = cdg.pal;
+  for (let i = 0, n = src.length; i < n; i++) img32[i] = pal[src[i]];
+  ctx.putImageData(img, 0, 0);
+}
+const cdg = new CDG();
+const audio = new Audio();
+audio.preload = 'auto';
+
+const queue = [];             // { name, audio: File, cdg: File }
+const pending = new Map();    // basename -> { name, audio?, cdg? } waiting for its partner
+let current = -1, audioURL = null, syncMs = 0, seeking = false, loaded = false;
+
+const AUDIO_EXT = ['mp3', 'ogg', 'm4a', 'wav', 'flac'];
+const ext = n => (n.match(/\.([^.\/\\]+)$/) || [, ''])[1].toLowerCase();
+const base = n => n.split(/[\/\\]/).pop().replace(/\.[^.]+$/, '');
+const fmt = s => { s = Math.max(0, s | 0); return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}`; };
+const say = t => { $('msg').textContent = t; };
+
+function idleScreen() {
+  ctx.setTransform(canvas.width / 300, 0, 0, canvas.height / 216, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, 216);
+  g.addColorStop(0, '#1b1640'); g.addColorStop(1, '#07060f');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 300, 216);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffb547'; ctx.font = '18px Bungee, Impact, sans-serif';
+  ctx.fillText('KARAOKE NIGHT', 150, 92);
+  ctx.fillStyle = '#c9c3ee'; ctx.font = '500 10px Figtree, system-ui, sans-serif';
+  ctx.fillText('Drop an MP3 + CDG pair (or a .zip) here', 150, 118);
+  ctx.fillText('or use "Add songs"', 150, 132);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+function put(file) {
+  const e = ext(file.name), key = base(file.name).toLowerCase();
+  const kind = e === 'cdg' ? 'cdg' : AUDIO_EXT.includes(e) ? 'audio' : null;
+  if (!kind) return;
+  const entry = pending.get(key) || { name: base(file.name) };
+  entry[kind] = file;
+  if (entry.audio && entry.cdg) { pending.delete(key); queue.push(entry); }
+  else pending.set(key, entry);
+}
+
+async function addFiles(files) {
+  const before = queue.length;
+  for (const f of files) {
+    if (ext(f.name) === 'zip') {
+      try {
+        const zip = await JSZip.loadAsync(f);
+        for (const entry of Object.values(zip.files)) {
+          if (entry.dir) continue;
+          const e = ext(entry.name);
+          if (e !== 'cdg' && !AUDIO_EXT.includes(e)) continue;
+          put(new File([await entry.async('blob')], entry.name.split('/').pop()));
+        }
+      } catch { say(`Couldn't open ${f.name}. Is it a valid .zip?`); }
+    } else put(f);
+  }
+  const added = queue.length - before;
+  const waiting = [...pending.values()].map(p => `${p.name} (needs ${p.audio ? '.cdg' : 'audio'})`);
+  say(waiting.length ? `Waiting for a partner file: ${waiting.join(', ')}` : '');
+  drawQueue();
+  if (added && current < 0) loadSong(before, false);
+}
+
+function drawQueue() {
+  const ol = $('queue');
+  ol.innerHTML = '';
+  if (!queue.length) { ol.innerHTML = '<li class="empty" style="cursor:default">No songs yet.</li>'; }
+  queue.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.className = i === current ? 'on' : '';
+    li.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span><button class="x" title="Remove">×</button>`;
+    li.querySelector('.t').textContent = s.name;
+    li.onclick = () => loadSong(i, true);
+    li.querySelector('.x').onclick = ev => { ev.stopPropagation(); removeSong(i); };
+    ol.appendChild(li);
+  });
+  $('prev').disabled = current <= 0;
+  $('next').disabled = current < 0 || current >= queue.length - 1;
+}
+
+function removeSong(i) {
+  queue.splice(i, 1);
+  if (i === current) { audio.pause(); current = -1; loaded = false; idleScreen(); $('now').textContent = 'No song loaded'; $('play').disabled = true; $('seek').disabled = true; }
+  else if (i < current) current--;
+  drawQueue();
+}
+
+async function loadSong(i, autoplay) {
+  if (i < 0 || i >= queue.length) return;
+  const s = queue[i];
+  current = i; loaded = false;
+  audio.pause();
+  cdg.load(await s.cdg.arrayBuffer());
+  if (audioURL) URL.revokeObjectURL(audioURL);
+  audioURL = URL.createObjectURL(s.audio);
+  audio.src = audioURL;
+  $('now').textContent = s.name;
+  $('play').disabled = false; $('seek').disabled = false;
+  loaded = true;
+  drawQueue();
+  if (autoplay) play();
+}
+
+function play() { audio.play().catch(() => say('The browser blocked playback. Press Play again.')); }
+function toggle() { if (!loaded) return; audio.paused ? play() : audio.pause(); }
+
+audio.addEventListener('play', () => $('play').textContent = 'Pause');
+audio.addEventListener('pause', () => $('play').textContent = 'Play');
+audio.addEventListener('loadedmetadata', () => $('dur').textContent = fmt(audio.duration));
+audio.addEventListener('ended', () => { if ($('auto').checked && current < queue.length - 1) loadSong(current + 1, true); });
+audio.addEventListener('error', () => { if (loaded) say(`This browser can't play the audio for "${queue[current]?.name}".`); });
+
+function frame() {
+  if (loaded) {
+    const t = audio.currentTime + syncMs / 1000;
+    cdg.advanceTo(Math.max(0, Math.floor(t * 300)));
+    if (cdg.dirty) paint();
+    if (!seeking && audio.duration) $('seek').value = (audio.currentTime / audio.duration) * 1000;
+    $('cur').textContent = fmt(audio.currentTime);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Controls ---------- */
+$('play').onclick = toggle;
+$('prev').onclick = () => loadSong(current - 1, true);
+$('next').onclick = () => loadSong(current + 1, true);
+$('seek').addEventListener('input', () => { seeking = true; if (audio.duration) $('cur').textContent = fmt($('seek').value / 1000 * audio.duration); });
+$('seek').addEventListener('change', () => { if (audio.duration) audio.currentTime = $('seek').value / 1000 * audio.duration; seeking = false; });
+$('vol').addEventListener('input', e => audio.volume = +e.target.value);
+$('sync').addEventListener('input', e => { syncMs = +e.target.value; $('syncOut').textContent = `${syncMs > 0 ? '+' : ''}${syncMs} ms`; });
+$('style').addEventListener('change', e => { setLook(e.target.value); try { localStorage.setItem('look', e.target.value); } catch {} });
+$('pick').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+$('fs').onclick = () => {
+  const st = $('stage');
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else if (st.requestFullscreen) st.requestFullscreen().catch(() => say('Full screen is not available here.'));
+  else say('Full screen is not available here.');
+};
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input[type=range]') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+  if (e.key === ' ' && !e.target.matches('button')) { e.preventDefault(); toggle(); }
+  else if (e.key === 'ArrowRight' && loaded) audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+  else if (e.key === 'ArrowLeft' && loaded) audio.currentTime = Math.max(0, audio.currentTime - 5);
+  else if (e.key === 'f' || e.key === 'F') $('fs').click();
+  else if ((e.key === 'n' || e.key === 'N') && current < queue.length - 1) loadSong(current + 1, true);
+});
+
+// Drag and drop anywhere on the page
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); if (++dragDepth === 1) $('stage').classList.add('drag'); });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('stage').classList.remove('drag'); } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; $('stage').classList.remove('drag');
+  if (e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]);
+});
+
+(document.fonts?.ready || Promise.resolve()).then(() => { if (!loaded) idleScreen(); });
+try { const saved = localStorage.getItem('look'); if (saved) $('style').value = saved; } catch {}
+setLook($('style').value);
+drawQueue();
+requestAnimationFrame(frame);
+</script>

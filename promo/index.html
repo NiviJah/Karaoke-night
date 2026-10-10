@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Bungee"; src: url("assets/fonts/bungee-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Figtree"; src: url("assets/fonts/figtree-400.woff2") format("woff2"); font-weight: 300 900; }
+
+      /* Karaoke Night brand: dark stage, amber marquee light, Bungee display + Figtree body. */
+      :root {
+        --bg: #100e1c; --deep: #07060f; --panel: #1a1730; --line: #2d2950;
+        --fg: #ece9fb; --muted: #a49ecb; --accent: #ffb547; --accent-ink: #241600;
+        --display: "Bungee", Impact, sans-serif;
+        --body: "Figtree", system-ui, sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--deep); }
+      #root { position: relative; width: 100%; height: 100%; font-family: var(--body); color: var(--fg); overflow: hidden; }
+      .clip { position: absolute; inset: 0; }
+
+      /* Stage backdrop with two sweeping spotlights */
+      #stage { background: radial-gradient(ellipse 80% 70% at 50% 35%, #241d52 0%, var(--bg) 55%, var(--deep) 100%); }
+      .beam { position: absolute; top: -260px; width: 520px; height: 1700px; transform-origin: 50% 0;
+        background: linear-gradient(180deg, rgba(255, 214, 140, .20), rgba(255, 181, 71, .06) 55%, transparent 80%);
+        filter: blur(18px); mix-blend-mode: screen; }
+      #beamL { left: 300px; }
+      #beamR { right: 300px; }
+      .floor { position: absolute; left: 0; right: 0; bottom: -240px; height: 520px;
+        background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(255, 181, 71, .14), transparent 70%); }
+
+      /* Shared type */
+      .eyebrow { font: 700 26px/1 var(--body); letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
+      .headline { font: 800 84px/1.04 var(--body); letter-spacing: -.02em; text-wrap: balance; }
+      .sub { font: 500 34px/1.4 var(--body); color: var(--muted); text-wrap: pretty; }
+      .copy { position: absolute; left: 150px; top: 50%; width: 640px; transform: translateY(-50%); display: grid; gap: 30px; }
+
+      /* Devices */
+      .tv { position: absolute; }
+      .tv .bezel { background: #050409; padding: 16px; border-radius: 18px; border: 2px solid #26223f;
+        box-shadow: 0 40px 120px rgba(0, 0, 0, .6), 0 0 80px rgba(255, 181, 71, .08); position: relative; }
+      .tv img { display: block; width: 100%; border-radius: 4px; }
+      .tv .stand { width: 26%; height: 40px; margin: 0 auto; background: linear-gradient(#1b1830, #0c0a16); clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%); }
+      .phone { position: absolute; width: 340px; background: #050409; border-radius: 52px; padding: 13px; border: 2px solid #2b2745;
+        box-shadow: 0 40px 100px rgba(0, 0, 0, .65); }
+      .phone .screen { position: relative; border-radius: 40px; overflow: hidden; aspect-ratio: 390 / 844; background: var(--bg); }
+      .phone .screen img { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+      /* Scene 1: karaoke lyric wipe, then the title */
+      .lyric { position: absolute; left: 50%; top: 455px; transform: translateX(-50%); white-space: nowrap; font: 800 92px/1 var(--body); letter-spacing: -.01em; }
+      .lyric .base { color: rgba(236, 233, 251, .42); }
+      .lyric .fill { position: absolute; inset: 0; color: var(--accent); text-shadow: 0 0 40px rgba(255, 181, 71, .45); clip-path: inset(0 100% 0 0); }
+      #ball { position: absolute; left: 0; top: -70px; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 30px rgba(255, 181, 71, .8); }
+      .title { position: absolute; left: 0; right: 0; top: 330px; text-align: center; font: 190px/1 var(--display); color: var(--accent);
+        text-shadow: 0 0 60px rgba(255, 181, 71, .35); white-space: nowrap; }
+      .title span { display: inline-block; }
+      .tagline { position: absolute; left: 0; right: 0; top: 590px; text-align: center; font: 600 52px/1.2 var(--body); color: var(--fg); }
+
+      /* Scene 2 */
+      #ring { position: absolute; border: 6px solid var(--accent); border-radius: 22px; box-shadow: 0 0 40px rgba(255, 181, 71, .6); }
+
+      /* Scene 3 */
+      #finger { position: absolute; width: 70px; height: 70px; border-radius: 50%; background: rgba(255, 255, 255, .85);
+        border: 4px solid rgba(255, 255, 255, .4); box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
+
+      /* Scene 4 */
+      .center-copy { position: absolute; left: 0; right: 0; top: 70px; text-align: center; display: grid; gap: 18px; justify-items: center; }
+      .buzz { position: absolute; width: 10px; height: 90px; border-radius: 6px; background: var(--accent); }
+
+      /* Scene 5: feature grid */
+      .grid { position: absolute; left: 150px; right: 150px; top: 330px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+      .card { background: rgba(26, 23, 48, .88); border: 2px solid var(--line); border-radius: 26px; padding: 40px 42px; display: grid; gap: 14px; }
+      .card h3 { font: 800 44px/1.1 var(--body); color: var(--fg); }
+      .card p { font: 500 28px/1.35 var(--body); color: var(--muted); }
+      .card .bar { width: 64px; height: 8px; border-radius: 4px; background: var(--accent); }
+
+      /* Scene 6: end card */
+      .end { display: grid; place-content: center; justify-items: center; text-align: center; gap: 34px; }
+      .end .logo { display: flex; align-items: center; gap: 40px; }
+      .end .logo .name { font: 150px/1 var(--display); color: var(--accent); text-shadow: 0 0 60px rgba(255, 181, 71, .35); }
+      .end .line { font: 700 56px/1.2 var(--body); }
+      .end .small { font: 600 32px/1 var(--body); color: var(--muted); letter-spacing: .04em; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="30" data-width="1920" data-height="1080">
+
+      <!-- Backdrop for the whole video -->
+      <div id="stage" class="clip" data-start="0" data-duration="30" data-track-index="0">
+        <div id="beamL" class="beam"></div>
+        <div id="beamR" class="beam"></div>
+        <div class="floor"></div>
+      </div>
+
+      <!-- 1. Lyric wipe + title (0 - 4.6s) -->
+      <div id="s1" class="clip" data-start="0" data-duration="4.6" data-track-index="1">
+        <div class="lyric" id="lyric">
+          <span class="base">Grab the mic. Tonight you're the star.</span>
+          <span class="fill" id="lyricFill">Grab the mic. Tonight you're the star.</span>
+          <div id="ball"></div>
+        </div>
+        <div class="title" id="title"><span>K</span><span>A</span><span>R</span><span>A</span><span>O</span><span>K</span><span>E</span>&nbsp;<span>N</span><span>I</span><span>G</span><span>H</span><span>T</span></div>
+        <div class="tagline" id="tagline">Your songs. Every phone. One stage.</div>
+      </div>
+
+      <!-- 2. The TV (4.6 - 10s) -->
+      <div id="s2" class="clip" data-start="4.6" data-duration="5.4" data-track-index="1">
+        <div class="copy" id="s2copy">
+          <div class="eyebrow">1 · The TV</div>
+          <h2 class="headline">Any TV becomes a karaoke machine.</h2>
+          <p class="sub">Plug in a USB drive of MP3+CDG songs and karaoke videos, open the TV page, and you're live.</p>
+        </div>
+        <div class="tv" id="tv2" style="left: 850px; top: 205px; width: 960px;">
+          <div class="bezel">
+            <img src="assets/shots/tv-idle.png" alt="" />
+            <div id="ring" style="left: 403px; top: 165px; width: 186px; height: 186px;"></div>
+          </div>
+          <div class="stand"></div>
+        </div>
+      </div>
+
+      <!-- 3. The phones (10 - 16s) -->
+      <div id="s3" class="clip" data-start="10" data-duration="6" data-track-index="1">
+        <div class="copy" id="s3copy" style="width: 600px;">
+          <div class="eyebrow">2 · The phones</div>
+          <h2 class="headline">Guests scan and pick songs.</h2>
+          <p class="sub">Search, jump A–Z, tap Add. Right from their own phone, no app to install.</p>
+        </div>
+        <div class="phone" id="phL" style="left: 840px; top: 150px; transform: rotate(-6deg);">
+          <div class="screen"><img src="assets/shots/phone-songs.png" alt="" /></div>
+        </div>
+        <div class="phone" id="phR" style="left: 1480px; top: 150px; transform: rotate(6deg);">
+          <div class="screen"><img src="assets/shots/phone-queue.png" alt="" /></div>
+        </div>
+        <div class="phone" id="phM" style="left: 1160px; top: 110px; z-index: 2;">
+          <div class="screen">
+            <img src="assets/shots/phone-search.png" alt="" />
+            <img id="phAdded" src="assets/shots/phone-added.png" alt="" style="opacity: 0;" />
+            <div id="finger" style="left: 230px; top: 460px; opacity: 0;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Turns (16 - 21.6s) -->
+      <div id="s4" class="clip" data-start="16" data-duration="5.6" data-track-index="1">
+        <div class="center-copy" id="s4copy">
+          <div class="eyebrow">3 · The turns</div>
+          <h2 class="headline">Everyone knows when it's their turn.</h2>
+          <p class="sub">The TV calls the next singer. Their phone buzzes.</p>
+        </div>
+        <div class="tv" id="tv4" style="left: 190px; top: 380px; width: 1060px;">
+          <div class="bezel"><img src="assets/shots/tv-upnext.png" alt="" /></div>
+          <div class="stand"></div>
+        </div>
+        <div class="phone" id="ph4" style="left: 1360px; top: 330px; width: 320px;">
+          <div class="screen"><img src="assets/shots/phone-turn.png" alt="" /></div>
+        </div>
+        <div class="buzz" id="bz1" style="left: 1318px; top: 560px;"></div>
+        <div class="buzz" id="bz2" style="left: 1712px; top: 560px;"></div>
+      </div>
+
+      <!-- 5. Features (21.6 - 26.2s) -->
+      <div id="s5" class="clip" data-start="21.6" data-duration="4.6" data-track-index="1">
+        <div class="center-copy" id="s5copy" style="top: 120px;">
+          <h2 class="headline">Everything a party needs.</h2>
+        </div>
+        <div class="grid">
+          <div class="card"><div class="bar"></div><h3>MP3+CDG &amp; MP4</h3><p>Classic karaoke tracks and karaoke videos.</p></div>
+          <div class="card"><div class="bar"></div><h3>Find songs fast</h3><p>Search, A–Z jump bar, genres.</p></div>
+          <div class="card"><div class="bar"></div><h3>Drag to reorder</h3><p>Shuffle the queue on the fly.</p></div>
+          <div class="card"><div class="bar"></div><h3>Your-turn alerts</h3><p>Phones buzz when you're up.</p></div>
+          <div class="card"><div class="bar"></div><h3>Smooth lyrics</h3><p>Old CDG text, without the jagged pixels.</p></div>
+          <div class="card"><div class="bar"></div><h3>No app, no account</h3><p>Runs on your computer and Wi-Fi.</p></div>
+        </div>
+      </div>
+
+      <!-- 6. End card (26.2 - 30s) -->
+      <div id="s6" class="clip end" data-start="26.2" data-duration="3.8" data-track-index="1">
+        <div class="logo" id="logo">
+          <svg width="130" height="190" viewBox="0 0 130 190" aria-hidden="true">
+            <rect x="25" y="4" width="80" height="112" rx="40" fill="#ffb547" />
+            <g stroke="#241600" stroke-width="5" opacity=".55">
+              <line x1="25" y1="44" x2="105" y2="44" /><line x1="25" y1="64" x2="105" y2="64" /><line x1="25" y1="84" x2="105" y2="84" />
+            </g>
+            <path d="M8 86 C8 132 122 132 122 86" fill="none" stroke="#ffb547" stroke-width="10" stroke-linecap="round" />
+            <line x1="65" y1="126" x2="65" y2="168" stroke="#ffb547" stroke-width="10" stroke-linecap="round" />
+            <line x1="35" y1="176" x2="95" y2="176" stroke="#ffb547" stroke-width="10" stroke-linecap="round" />
+          </svg>
+          <div class="name">Karaoke Night</div>
+        </div>
+        <div class="line" id="endLine">Turn any night into karaoke night.</div>
+        <div class="small" id="endSmall">Free · Windows, Mac &amp; Linux · Phones join over Wi-Fi</div>
+      </div>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const ease = "power3.out";
+
+      // Backdrop: slow spotlight sweep for the whole video
+      tl.fromTo("#beamL", { rotation: 18 }, { rotation: -14, duration: 15, ease: "sine.inOut", yoyo: true, repeat: 1 }, 0);
+      tl.fromTo("#beamR", { rotation: -18 }, { rotation: 14, duration: 15, ease: "sine.inOut", yoyo: true, repeat: 1 }, 0);
+
+      // 1. Lyric wipe with a bouncing ball, then the title drops in
+      tl.fromTo("#lyric", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease }, 0.1);
+      tl.fromTo("#lyricFill", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 2.1, ease: "none" }, 0.35);
+      tl.fromTo("#ball", { x: 0 }, { x: 1520, duration: 2.1, ease: "none" }, 0.35);
+      tl.fromTo("#ball", { y: 0 }, { y: -46, duration: 0.15, ease: "sine.out", yoyo: true, repeat: 13 }, 0.35);
+      tl.to("#lyric", { opacity: 0, y: -40, scale: 0.92, duration: 0.35, ease: "power2.in" }, 2.55);
+      tl.from("#title span", { y: -260, opacity: 0, duration: 0.55, ease: "back.out(1.8)", stagger: 0.045 }, 2.75);
+      tl.fromTo("#tagline", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease }, 3.45);
+      tl.to(["#title", "#tagline"], { opacity: 0, y: -30, duration: 0.3, ease: "power2.in" }, 4.3);
+
+      // 2. The TV
+      tl.from("#s2copy > *", { opacity: 0, x: -50, duration: 0.6, ease, stagger: 0.12 }, 4.7);
+      tl.from("#tv2", { opacity: 0, x: 180, scale: 0.94, duration: 0.8, ease }, 4.75);
+      tl.fromTo("#ring", { opacity: 0, scale: 1.4 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(2)" }, 6.4);
+      tl.to("#ring", { scale: 1.08, duration: 0.4, ease: "sine.inOut", yoyo: true, repeat: 4 }, 6.85);
+      tl.to(["#s2copy", "#tv2"], { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, 9.65);
+
+      // 3. The phones: fan in, then a tap on Add
+      tl.from("#s3copy > *", { opacity: 0, x: -50, duration: 0.6, ease, stagger: 0.12 }, 10.1);
+      tl.from("#phM", { opacity: 0, y: 240, duration: 0.8, ease }, 10.15);
+      tl.from("#phL", { opacity: 0, x: 140, y: 200, duration: 0.8, ease }, 10.35);
+      tl.from("#phR", { opacity: 0, x: -140, y: 200, duration: 0.8, ease }, 10.45);
+      tl.fromTo("#finger", { opacity: 0, x: -120, y: 220 }, { opacity: 1, x: 0, y: 0, duration: 0.7, ease: "power2.inOut" }, 11.8);
+      tl.to("#finger", { scale: 0.8, duration: 0.12, ease: "power1.in", yoyo: true, repeat: 1 }, 12.55);
+      tl.to("#phAdded", { opacity: 1, duration: 0.25 }, 12.7);
+      tl.to("#finger", { opacity: 0, y: 140, duration: 0.5, ease: "power2.in" }, 13.0);
+      tl.to("#phM", { scale: 1.04, duration: 0.25, ease: "sine.inOut", yoyo: true, repeat: 1 }, 12.7);
+      tl.to(["#s3copy", "#phL", "#phM", "#phR"], { opacity: 0, y: -30, duration: 0.35, ease: "power2.in", stagger: 0.04 }, 15.6);
+
+      // 4. Turns: TV says "Up next", the phone buzzes
+      tl.from("#s4copy > *", { opacity: 0, y: 30, duration: 0.6, ease, stagger: 0.12 }, 16.1);
+      tl.from("#tv4", { opacity: 0, y: 120, duration: 0.8, ease }, 16.3);
+      tl.from("#ph4", { opacity: 0, x: 160, duration: 0.8, ease }, 16.6);
+      tl.to("#ph4", { x: 10, rotation: 2, duration: 0.05, ease: "none", yoyo: true, repeat: 15 }, 17.7);
+      tl.to("#ph4", { x: 10, rotation: -2, duration: 0.05, ease: "none", yoyo: true, repeat: 15 }, 19.2);
+      tl.fromTo(["#bz1", "#bz2"], { opacity: 0, scaleY: 0.4 }, { opacity: 1, scaleY: 1, duration: 0.1, yoyo: true, repeat: 7 }, 17.7);
+      tl.fromTo(["#bz1", "#bz2"], { opacity: 0, scaleY: 0.4 }, { opacity: 1, scaleY: 1, duration: 0.1, yoyo: true, repeat: 7, immediateRender: false }, 19.2);
+      tl.to(["#s4copy", "#tv4", "#ph4"], { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, 21.2);
+
+      // 5. Features
+      tl.from("#s5copy", { opacity: 0, y: 30, duration: 0.5, ease }, 21.7);
+      tl.from(".card", { opacity: 0, y: 60, scale: 0.94, duration: 0.55, ease, stagger: 0.14 }, 21.95);
+      tl.to(["#s5copy", ".grid"], { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, 25.85);
+
+      // 6. End card
+      tl.from("#logo", { opacity: 0, scale: 0.8, duration: 0.7, ease: "back.out(1.6)" }, 26.3);
+      tl.from("#endLine", { opacity: 0, y: 30, duration: 0.6, ease }, 26.9);
+      tl.from("#endSmall", { opacity: 0, y: 20, duration: 0.6, ease }, 27.3);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

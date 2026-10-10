@@ -1,0 +1,10 @@
+# Local settings and generated files
+config.json
+converted/
+node_modules/
+songs/
+promo/snapshots/
+promo/renders/
+promo/*.mp4
+.DS_Store
+Thumbs.db
