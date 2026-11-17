@@ -614,7 +614,10 @@ function start() {
   if (started) return;
   started = true;
   showOnly('idle');
-  document.documentElement.requestFullscreen?.().catch(() => {});
+  // With the extension the whole window goes full screen, so it stays that way while YouTube songs play
+  // in another tab. (A page's own full screen ends as soon as the tab changes.)
+  if (ext.ready) ext.send('fullscreen');
+  else document.documentElement.requestFullscreen?.().catch(() => {});
   // Prime audio playback with the click so later songs can start on their own.
   audio.play().catch(() => {});
   vid.play().catch(() => {}); // Safari allows sound per player, so unlock the video player with this click too
@@ -630,7 +633,8 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Enter' && mode === 'intro') { skipIntro = true; if (typeof skipWait === 'function') skipWait(); }
   else if (e.key === 'n' || e.key === 'N') advance();
   else if (e.key === 'f' || e.key === 'F') {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (ext.ready && !document.fullscreenElement) ext.send('fullscreen', { toggle: true });
+    else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else document.documentElement.requestFullscreen?.().catch(() => {});
   }
   else if (e.key === 'l' || e.key === 'L') { const looks = ['smooth', 'soft', 'pixel']; setLook(looks[(looks.indexOf(look) + 1) % 3]); toast(`Lyrics look: ${look}`); }

@@ -113,6 +113,10 @@ karaoke video in it joins the phones' **Songs** list, marked **YouTube**, next t
   next to the app; use **Update** now and then to pick up new uploads.
 - Imported YouTube songs only appear on phones while the TV has the extension, since that's what plays them.
 
+With the extension, **Start** puts the whole browser window in full screen (like F11), so it stays full screen while
+YouTube songs play in their own tab; press **F** on the TV page to leave or return to full screen. On the YouTube tab only
+the video is shown: YouTube's header, related videos, description and comments are hidden.
+
 **During a YouTube song**, Pause, Restart and Skip from phones work as usual. When the song ends, the TV goes back to
 Karaoke Night by itself. To leave a song early, move the mouse and click **← Back to Karaoke Night**, or press **B**
 (or **N**) on the TV computer. If YouTube can't play a video (private, removed, or a sign-in page), the TV says so and moves on.

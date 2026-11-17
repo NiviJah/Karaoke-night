@@ -19,6 +19,7 @@ async function handle(msg, sender) {
     if (msg.type === 'register') { await save({ tvTab: tab.id }); return { ok: true }; }
     if (msg.type === 'play') return play(msg.videoId, tab);
     if (msg.type === 'stop') return stop(s, tab);
+    if (msg.type === 'fullscreen') return fullscreen(tab.windowId, msg.toggle);
     if (msg.type === 'command' && s.ytTab) {
       await chrome.tabs.sendMessage(s.ytTab, { type: 'command', action: msg.action }).catch(() => {});
     }
@@ -49,14 +50,32 @@ async function play(videoId, tvTab) {
     await save({ tvTab: tvTab.id, ytTab: yt.id, videoId });
     await chrome.tabs.update(yt.id, { url, active: true });
   }
-  // Full screen for the whole window, so both tabs stay full screen as we switch between them.
-  await chrome.windows.update(tvTab.windowId, { state: 'fullscreen' }).catch(() => {});
+  await keepFullscreen(tvTab.windowId);
   return { ok: true };
+}
+
+// The whole window goes full screen (like F11), so it stays full screen as we switch between the TV tab
+// and the YouTube tab. Leaving a page's own full screen can put the window back to normal a moment
+// after a tab switch, so check again shortly after.
+async function fullscreen(windowId, toggle) {
+  const win = await chrome.windows.get(windowId).catch(() => null);
+  if (!win) return { ok: false };
+  const state = toggle && win.state === 'fullscreen' ? 'maximized' : 'fullscreen';
+  await chrome.windows.update(windowId, { state }).catch(() => {});
+  return { ok: true, state };
+}
+async function keepFullscreen(windowId) {
+  for (const wait of [0, 500, 1500]) {
+    await new Promise(r => setTimeout(r, wait));
+    const win = await chrome.windows.get(windowId).catch(() => null);
+    if (win && win.state !== 'fullscreen') await chrome.windows.update(windowId, { state: 'fullscreen' }).catch(() => {});
+  }
 }
 
 async function stop(s, tvTab) {
   if (s.ytTab) await chrome.tabs.update(s.ytTab, { url: 'about:blank' }).catch(() => {});
   await chrome.tabs.update(tvTab.id, { active: true }).catch(() => {});
+  keepFullscreen(tvTab.windowId);
   return { ok: true };
 }
 

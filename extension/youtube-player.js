@@ -14,7 +14,10 @@
   const style = document.createElement('style');
   style.textContent = `
     html, body { background: #000 !important; overflow: hidden !important; }
-    #masthead-container { display: none !important; }
+    /* Hide everything except the player: YouTube's side column, description and comments can draw above it. */
+    body *:not(#movie_player, #movie_player *) { visibility: hidden !important; }
+    #movie_player { visibility: visible !important; }
+    #masthead-container, #secondary, #below, #chat, ytd-mini-guide-renderer, tp-yt-app-drawer { display: none !important; }
     #movie_player { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
       z-index: 2147483000 !important; background: #000 !important; }
     #movie_player .html5-video-container { width: 100% !important; height: 100% !important; }
