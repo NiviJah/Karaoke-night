@@ -364,15 +364,40 @@ async function serveStatic(res, file) {
 // Network addresses phones can use, best first. Computers often have extra virtual adapters
 // (VPN, WSL, Hyper-V, Docker, VirtualBox) whose addresses phones can't reach, so those go last.
 // To force one, add  "address": "192.168.1.20"  to config.json.
-const VIRTUAL_ADAPTER = /vethernet|virtual|vmware|vbox|wsl|hyper-v|docker|br-|veth|utun|tun|tap|zerotier|tailscale|hamachi|vpn|loopback|bluetooth/i;
+// Mac: bridge100 (Internet Sharing, Docker, Parallels, UTM), vmnet, awdl/llw (AirDrop), utun (VPN), anpi...
+const VIRTUAL_ADAPTER = /vethernet|virtual|vmware|vmnet|vbox|wsl|hyper-v|docker|bridge|br-|veth|vnic|utun|tun|tap|ipsec|ppp|zerotier|tailscale|hamachi|vpn|loopback|bluetooth|awdl|llw|anpi|gif|stf/i;
+
+// The connection that leads to the router (the "default route") is the one phones on the same Wi-Fi can reach.
+// Asked once at startup; returns an interface name (Mac, Linux) or an address (Windows), or null.
+function defaultRoute() {
+  const { spawnSync } = require('child_process');
+  const run = (cmd, args) => { try { return spawnSync(cmd, args, { timeout: 3000, windowsHide: true, encoding: 'utf8' }).stdout || ''; } catch { return ''; } };
+  if (process.platform === 'darwin') {
+    const m = /interface:\s*(\S+)/.exec(run('route', ['-n', 'get', 'default']));
+    return m ? { name: m[1] } : null;
+  }
+  if (process.platform === 'win32') {
+    // "0.0.0.0  0.0.0.0  <gateway>  <interface address>  <metric>": take the lowest metric.
+    const rows = [...run('route', ['print', '-4', '0.0.0.0']).matchAll(/^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+\S+\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)/gm)];
+    rows.sort((a, b) => +a[2] - +b[2]);
+    return rows.length ? { address: rows[0][1] } : null;
+  }
+  const m = /\bdev\s+(\S+)/.exec(run('ip', ['route', 'show', 'default']));
+  return m ? { name: m[1] } : null;
+}
+let routeCache;
+const routerSide = () => (routeCache === undefined ? (routeCache = defaultRoute()) : routeCache);
+
 function lanAddresses() {
   const list = [];
+  const route = routerSide();
   for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
     for (const a of addrs || []) {
       if (a.family !== 'IPv4' && a.family !== 4) continue;
       if (a.internal || a.address.startsWith('169.254.')) continue;
       let score = a.address.startsWith('192.168.') ? 0 : a.address.startsWith('10.') ? 1 : /^172\.(1[6-9]|2\d|3[01])\./.test(a.address) ? 2 : 3;
       if (VIRTUAL_ADAPTER.test(name)) score += 10;
+      if (route && (route.name === name || route.address === a.address)) score -= 20;
       list.push({ address: a.address, name, score });
     }
   }
@@ -710,6 +735,10 @@ server.listen(PORT, () => {
     ? `  Phones:       http://${a.address}:${PORT}   <- shown on the TV (${a.name})`
     : `  Also:         http://${a.address}:${PORT}   (${a.name})`));
   if (addrs.length > 1) console.log('  If phones can\'t open the TV address, add "address": "<one of the others>" to config.json.');
+  if (process.platform === 'darwin') {
+    console.log('  Mac: if phones say "site can\'t be reached", allow incoming connections for "node" in');
+    console.log('       System Settings > Network > Firewall > Options (see README, Troubleshooting).');
+  }
   const ff = audioFix.init(__dirname, DATA_DIR, loadConfig().ffmpeg);
   console.log(ff
     ? `  ffmpeg:       found, so videos with sound browsers can't play (e.g. Dolby AC-3) get converted`

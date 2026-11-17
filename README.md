@@ -194,6 +194,18 @@ saved-data folder, see [Your saved data](#your-saved-data)):
 }
 ```
 
+**Mac: phones say "site can't be reached".** Check these on the Mac, then reload the page on the phone:
+
+1. **Firewall:** System Settings → Network → Firewall. If it's on, click **Options** and make sure **node** is set to
+   **Allow incoming connections** (add it with **+** if it isn't listed), and that **Block all incoming connections**
+   is off. Turning the firewall off for a minute is a quick way to test.
+2. **Local Network access:** System Settings → Privacy & Security → **Local Network**, and turn on the app you start
+   Karaoke Night from (Terminal, iTerm or VS Code).
+3. **The address:** the window lists every address. Try the others on the phone; if one works, add it to `config.json`
+   as `"address"` (see above). On the Mac, Wi-Fi's address is also in System Settings → Wi-Fi → Details.
+4. The phone and Mac must be on the same Wi-Fi network (not a guest network, which often blocks devices from
+   reaching each other).
+
 **"Port 8080 is busy".** The app moves to the next free port (8081, 8082, ...) by itself; use the addresses it prints.
 If it happens every time, an old Karaoke Night window is probably still running.
 
