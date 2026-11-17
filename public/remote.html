@@ -60,7 +60,11 @@ li button { padding: 8px 12px; flex: none; }
 .empty { color: var(--muted); padding: 16px 4px; }
 .yt { display: grid; gap: 10px; }
 .yt p { margin: 0; color: var(--muted); font-size: 14px; }
-.yt ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
+.yt ol li { display: list-item; background: none; border: 0; border-radius: 0; padding: 0; } /* not song-list cards */
+.ytfind { display: flex; gap: 8px; margin-top: 8px; }
+.ytfind input { flex: 1; min-width: 0; padding: 9px 10px; font-size: 15px; }
+.ytfind button { flex: none; padding: 8px 10px; font-size: 14px; }
+.yt ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; display: grid; gap: 10px; }
 .more { width: 100%; margin-top: 10px; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
 .chips { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -139,13 +143,18 @@ li.letter { background: none; border: 0; padding: 10px 4px 0; font: 16px var(--d
 
   <section id="ytPane" class="yt" hidden>
     <ol>
-      <li>In the YouTube app, search for the song plus <b>karaoke</b> (for example "Dancing Queen karaoke").</li>
-      <li>Tap <b>Share</b>, then <b>Copy link</b>.</li>
-      <li>Paste it here and tap <b>Add</b>.</li>
+      <li>Find a karaoke version on YouTube:
+        <div class="ytfind">
+          <input type="search" id="ytFind" placeholder="Song name, e.g. Dancing Queen" autocomplete="off" enterkeyhint="search" dir="auto">
+          <button id="ytFindBtn">Search YouTube</button>
+        </div>
+      </li>
+      <li>In YouTube, tap <b>Share</b>, then <b>Copy link</b>.</li>
+      <li>Come back, paste it here and tap <b>Add</b>.</li>
     </ol>
     <input type="text" id="ytLink" placeholder="Paste a YouTube link" autocomplete="off" inputmode="url" enterkeyhint="go">
     <button class="primary" id="ytAdd">Add</button>
-    <p>Needs internet on the TV computer. A few videos can't be played outside YouTube; the TV skips those.</p>
+    <p>YouTube songs play on the TV through YouTube itself, so they need internet on the TV computer, and YouTube's ads may play.</p>
   </section>
 
   <section id="queuePane" hidden>
@@ -196,6 +205,7 @@ function songRow(s, right) {
   li.innerHTML = `<span class="num"></span><span class="txt"><div class="t"></div><div class="a"></div></span>`;
   li.querySelector('.num').textContent = s.number;
   li.querySelector('.t').textContent = s.title;
+  li.querySelector('.t').dir = li.querySelector('.a').dir = 'auto'; // Hebrew titles read right to left
   if (s.kind === 'video') li.querySelector('.t').insertAdjacentHTML('beforeend', '<span class="tag">Video</span>');
   li.querySelector('.a').textContent = s.artist;
   if (right) li.append(right);
@@ -350,7 +360,7 @@ function renderQueue() {
     const li = songRow(e.song);
     li.querySelector('.num').textContent = `#${i + 1}`;
     const singer = document.createElement('div');
-    singer.className = 's'; singer.textContent = e.singer;
+    singer.className = 's'; singer.textContent = e.singer; singer.dir = 'auto';
     li.querySelector('.txt').prepend(singer);
     if (isMine(e)) li.classList.add('mine');
     li.dataset.id = e.id;
@@ -465,6 +475,8 @@ function connect() {
     const prevCount = state.songCount;
     state = JSON.parse(e.data);
     renderQueue(); renderNow(); checkMyTurn();
+    $('tabYt').hidden = !state.youtube;
+    if (!state.youtube && !$('ytPane').hidden) showTab('songs');
     if (prevCount !== state.songCount) search();
   });
   es.addEventListener('status', e => { state.status = JSON.parse(e.data); renderNow(); });
@@ -521,6 +533,15 @@ function checkMyTurn() {
 $('alertOk').onclick = () => { $('alert').hidden = true; buzz(0); };
 
 fetch('/api/info').then(r => r.json()).then(info => { $('tabYt').hidden = !info.youtube; }).catch(() => {});
+
+// Opens YouTube (the app, on most phones) searching for a karaoke version.
+$('ytFindBtn').onclick = () => {
+  const q = $('ytFind').value.trim();
+  if (!q) { toast('Type a song name first'); $('ytFind').focus(); return; }
+  const word = /[\u0590-\u05FF]/.test(q) ? 'קריוקי' : 'karaoke'; // Hebrew song names search Hebrew karaoke channels
+  window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(`${q} ${word}`)}`, '_blank');
+};
+$('ytFind').addEventListener('keydown', e => { if (e.key === 'Enter') $('ytFindBtn').click(); });
 
 connect();
 search();

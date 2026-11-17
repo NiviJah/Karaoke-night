@@ -20,7 +20,9 @@ guests pick songs from their phones. Everyone sees the queue, and each singer's 
 - **Easy browsing:** search, an A–Z jump bar, Karaoke/Video filter, genres, sort by artist or song.
 - **Smooth lyrics:** old blocky CDG text is upscaled so it looks clean on a big TV.
 - **Fixes silent videos:** converts Dolby AC-3 sound that browsers can't play (needs ffmpeg, see below).
-- **Works offline:** everything runs on your computer and your Wi-Fi.
+- **YouTube songs too (optional):** with the included Chrome extension, guests can also queue YouTube karaoke videos,
+  including Hebrew ones, which play on youtube.com full screen in between your own songs. Nothing is downloaded.
+- **Works offline:** everything runs on your computer and your Wi-Fi (YouTube songs need internet).
 
 ## How to run
 
@@ -64,6 +66,31 @@ in `config.json`, so next time it starts straight away. Press **S** on the TV co
 
 Phones must be on the same Wi-Fi. Guests scan the QR code on the TV (or type the address shown), enter their name and
 start adding songs.
+
+## YouTube songs (optional Chrome extension)
+
+YouTube blocks karaoke videos from playing inside other apps, but they play fine on youtube.com. The extension in the
+`extension` folder lets Karaoke Night play queued YouTube songs on youtube.com itself: when a YouTube song's turn comes,
+it opens the video in a second tab, makes the player fill the screen, and switches back to Karaoke Night when the song
+ends. Nothing is downloaded or stored.
+
+**Install it once** on the computer connected to the TV, in Chrome (or Edge):
+
+1. Go to `chrome://extensions` (in Edge: `edge://extensions`) and turn on **Developer mode** (top right).
+2. Click **Load unpacked** and choose the `extension` folder inside Karaoke Night.
+3. Open youtube.com once in that browser and accept any cookie or sign-in screen. Signing in with YouTube Premium removes ads.
+4. Optional but recommended: on youtube.com, click the icon left of the address, open **Site settings** and set
+   **Sound** to **Allow**, so songs start without a click.
+
+Then open the TV page as usual. Phones get a **YouTube** tab automatically: guests tap **Search YouTube** to find a
+karaoke version (Hebrew song names search for "קריוקי"), copy the video's link with **Share → Copy link**, paste it and tap **Add**.
+
+During a YouTube song, Pause, Restart and Skip from phones work as usual, and **N** on the TV computer skips.
+If YouTube can't play a video (private, removed, or a sign-in page), the TV says so and moves on.
+
+Things to know: YouTube songs need internet (a phone hotspot is fine), YouTube's ads may play without Premium, and if
+YouTube changes its page design the extension may need an update. The extension only takes over the tab it opened;
+your other YouTube tabs are left alone.
 
 ## Your songs
 
@@ -145,13 +172,14 @@ If it happens every time, an old Karaoke Night window is probably still running.
 | `songDir` | The songs folder (set by the TV setup screen) |
 | `address` | Force the address shown to phones |
 | `ffmpeg` | Path to ffmpeg if it isn't found automatically |
-| `youtube` | `true` turns on pasting YouTube links (off by default; see below) |
+| `youtube` | `true` turns on YouTube links without the extension (they play embedded, which YouTube blocks for most karaoke videos) |
 
 A folder given on the command line (`node server.js "E:\Karaoke" 8080`) or with `SONG_DIR` in the start file
 overrides `songDir`.
 
-**About YouTube:** the code can queue YouTube links, but it's off by default. In testing, YouTube blocked all 48
-karaoke videos we tried, from every major karaoke channel, from playing outside youtube.com because of music licensing.
+**About YouTube without the extension:** in testing, YouTube blocked all 48 karaoke videos we tried, from every major
+karaoke channel, from playing embedded in another page because of music licensing. That's why YouTube songs go through
+the extension.
 
 ## Single-file player
 
@@ -168,6 +196,7 @@ lib/audio-fix.js     converts unplayable video sound with ffmpeg
 public/tv.html       the TV screen (CDG player, videos, QR codes, setup)
 public/remote.html   the phone page (songs, queue, controls, alerts)
 public/cdg.js        CD+G decoder and lyric smoothing
+extension/           Chrome extension that plays YouTube songs on youtube.com
 standalone/          single-file browser player
 promo/               source of the promo video (HyperFrames)
 docs/                promo video and screenshots

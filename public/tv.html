@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Karaoke Night · TV</title>
+<meta name="application-name" content="Karaoke Night">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;600;800&display=swap">
 <style>
 :root {
@@ -81,8 +82,8 @@ canvas { max-width: 100%; max-height: 100%; aspect-ratio: 300 / 216; width: auto
 
   <div class="card" id="intro" hidden>
     <span class="label">Up next</span>
-    <p class="big" id="introSinger"></p>
-    <p class="mid" id="introSong"></p>
+    <p class="big" id="introSinger" dir="auto"></p>
+    <p class="mid" id="introSong" dir="auto"></p>
     <div class="count" id="introCount"></div>
     <p class="dim" id="introNote">Press Enter to start now</p>
     <div class="introJoin"><canvas class="qr" id="introQr" aria-label="QR code for the song request page"></canvas>Scan to add a song</div>
@@ -130,7 +131,7 @@ const cdg = new CDG();
 const audio = new Audio();
 audio.preload = 'auto';
 
-let kind = null; // what is playing: 'cdg', 'video' or 'yt'
+let kind = null; // what is playing: 'cdg', 'video', 'yt' (embedded) or 'ytext' (on youtube.com via the extension)
 const vid = document.getElementById('vid');
 let started = false, mode = 'idle', token = 0, current = null, state = null, loaded = false, skipWait = null, skipIntro = false;
 let syncMs = 0, look = 'smooth';
@@ -200,6 +201,7 @@ function renderBar() {
     const span = document.createElement('span');
     span.innerHTML = `${i ? ' &nbsp;·&nbsp; ' : 'Next: '}<b></b> `;
     span.querySelector('b').textContent = e.singer;
+    span.dir = 'auto';
     span.append(songLine(e.song));
     $('next').append(span);
   });
@@ -254,20 +256,54 @@ function ytError(e) {
 function stopYouTube() {
   try { yt?.stopVideo(); } catch {}
   $('ytWrap').hidden = true;
+  if (kind === 'ytext') ext.send('stop');
 }
+
+/* ---------- The Karaoke Night Chrome extension ----------
+   With it installed, YouTube songs play on youtube.com in a second tab (YouTube blocks karaoke videos
+   from playing embedded). The extension switches tabs, and reports progress and the end of the song. */
+const ext = {
+  ready: false,
+  status: { time: 0, duration: 0, paused: false },
+  send(type, extra) { window.postMessage({ source: 'karaoke-night-tv', type, ...extra }, '*'); },
+};
+window.addEventListener('message', e => {
+  const m = e.data;
+  if (e.source !== window || m?.source !== 'karaoke-night-ext') return;
+  if (m.type === 'ready') {
+    if (!ext.ready) post('/api/player/caps', { youtubeExtension: true }).catch(() => {});
+    ext.ready = true;
+  } else if (kind !== 'ytext' || mode !== 'playing') {
+    return;
+  } else if (m.type === 'status') {
+    ext.status = m;
+    ext.lastStatus = Date.now();
+  } else if (m.type === 'ended' || (m.type === 'key' && m.key === 'skip')) {
+    advance();
+  } else if (m.type === 'error') {
+    const my = token;
+    ext.send('stop');
+    toast(`YouTube couldn't play "${current?.song.title}": ${(m.reason || 'unknown error').replace(/[.\s]+$/, '')}. Skipping it.`, 6000);
+    setTimeout(() => { if (my === token) advance(); }, 4000);
+  }
+});
+ext.send('hello');
+// Tell the server again if it restarts while the TV stays open.
+setInterval(() => { if (ext.ready) post('/api/player/caps', { youtubeExtension: true }).catch(() => {}); }, 30000);
 
 // One set of controls for whichever kind of song is playing.
 const el = () => kind === 'video' ? vid : audio; // the <audio>/<video> element in use
 const media = {
-  paused: () => kind === 'yt' ? yt?.getPlayerState?.() !== 1 : el().paused,
-  play: () => kind === 'yt' ? yt?.playVideo() : el().play().catch(() => {}),
-  pause: () => kind === 'yt' ? yt?.pauseVideo() : el().pause(),
+  paused: () => kind === 'ytext' ? ext.status.paused : kind === 'yt' ? yt?.getPlayerState?.() !== 1 : el().paused,
+  play: () => kind === 'ytext' ? ext.send('command', { action: 'resume' }) : kind === 'yt' ? yt?.playVideo() : el().play().catch(() => {}),
+  pause: () => kind === 'ytext' ? ext.send('command', { action: 'pause' }) : kind === 'yt' ? yt?.pauseVideo() : el().pause(),
   restart: () => {
-    if (kind === 'yt') { yt?.seekTo(0, true); yt?.playVideo(); }
+    if (kind === 'ytext') ext.send('command', { action: 'restart' });
+    else if (kind === 'yt') { yt?.seekTo(0, true); yt?.playVideo(); }
     else { el().currentTime = 0; el().play().catch(() => {}); }
   },
-  time: () => kind === 'yt' ? (yt?.getCurrentTime?.() || 0) : (el().currentTime || 0),
-  duration: () => kind === 'yt' ? (yt?.getDuration?.() || 0) : (el().duration || 0),
+  time: () => kind === 'ytext' ? ext.status.time : kind === 'yt' ? (yt?.getCurrentTime?.() || 0) : (el().currentTime || 0),
+  duration: () => kind === 'ytext' ? ext.status.duration : kind === 'yt' ? (yt?.getDuration?.() || 0) : (el().duration || 0),
 };
 
 function stopVideo() {
@@ -346,6 +382,26 @@ async function advance() {
         toast(`No sound is coming from this video. Its sound format${sound.format ? ` (${sound.format})` : ''} may not play in this browser.`, 9000);
       }
     }, 4000);
+    return;
+  }
+
+  if (isYt && ext.ready) {
+    kind = 'ytext'; mode = 'playing';
+    ext.status = { time: 0, duration: 0, paused: false };
+    $('introSinger').textContent = current.singer;
+    $('introSong').textContent = songLine(current.song);
+    $('introCount').textContent = '▶';
+    $('introNote').textContent = 'Playing on YouTube. Press N on the YouTube tab to skip.';
+    ext.send('play', { videoId: current.song.youtube });
+    // If YouTube shows something else (a sign-in, cookie or "are you a robot" page), don't wait forever.
+    ext.lastStatus = 0;
+    const my = token;
+    setTimeout(() => {
+      if (my !== token || kind !== 'ytext' || ext.lastStatus) return;
+      ext.send('stop');
+      toast("YouTube didn't start the video. Open youtube.com once in this Chrome window and accept any sign-in or cookie screen. Skipping it.", 9000);
+      setTimeout(() => { if (my === token) advance(); }, 5000);
+    }, 40000);
     return;
   }
 

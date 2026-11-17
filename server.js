@@ -214,7 +214,7 @@ let status = { state: 'idle', time: 0, duration: 0 };
 let nextId = 1;
 const listeners = new Set();
 
-const state = () => ({ nowPlaying, queue, status, songCount: songs.length, scanning, setupNeeded: !songDirOk() });
+const state = () => ({ nowPlaying, queue, status, songCount: songs.length, scanning, setupNeeded: !songDirOk(), youtube: youtubeEnabled() });
 
 /* ---------- Setup (only from the computer running the server) ---------- */
 
@@ -355,9 +355,11 @@ function lanUrls() {
 
 /* ---------- YouTube links ---------- */
 
-// Off by default: in testing, YouTube blocked every karaoke video from playing outside youtube.com.
-// To try it anyway, add  "youtube": true  to config.json.
-const youtubeEnabled = () => loadConfig().youtube === true;
+// YouTube blocks nearly all karaoke videos from playing embedded in another page, so YouTube links are
+// on only when the TV has the Karaoke Night Chrome extension (it plays songs on youtube.com itself,
+// so YouTube's embedding blocks don't apply), or when "youtube": true is in config.json.
+let tvHasYoutubeExtension = false;
+const youtubeEnabled = () => tvHasYoutubeExtension || loadConfig().youtube === true;
 
 // Accepts youtube.com/watch?v=, youtu.be/, /shorts/, /embed/, /live/, m. and music. links.
 function youtubeId(link) {
@@ -379,7 +381,7 @@ async function youtubeSong(link) {
   try {
     const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}`,
       { signal: AbortSignal.timeout(6000) });
-    if (r.status === 401 || r.status === 403) return { error: "This video's owner doesn't allow it to play outside YouTube. Try a different karaoke version." };
+    if ((r.status === 401 || r.status === 403) && !tvHasYoutubeExtension) return { error: "This video's owner doesn't allow it to play outside YouTube. Try a different karaoke version." };
     if (r.status === 400 || r.status === 404) return { error: "Can't find that video. It may be private or deleted." };
     if (r.ok) { const j = await r.json(); title = j.title || title; artist = j.author_name || artist; }
   } catch {
@@ -493,6 +495,15 @@ async function handle(req, res) {
     status = { state: nowPlaying ? 'intro' : 'idle', time: 0, duration: 0 };
     broadcastState();
     return json(res, 200, { nowPlaying });
+  }
+  if (m === 'POST' && p === '/api/player/caps') {
+    const b = await readBody(req);
+    if (!!b.youtubeExtension !== tvHasYoutubeExtension) {
+      tvHasYoutubeExtension = !!b.youtubeExtension;
+      console.log(tvHasYoutubeExtension ? 'TV has the YouTube extension: YouTube links are on.' : 'TV YouTube extension gone.');
+      broadcastState();
+    }
+    return json(res, 200, { ok: true });
   }
   if (m === 'POST' && p === '/api/player/status') {
     const b = await readBody(req);
