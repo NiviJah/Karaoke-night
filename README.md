@@ -96,8 +96,21 @@ To get a key (about 5 minutes, free, needs a Google account):
    (Optional: edit the key and restrict it to YouTube Data API v3.)
 4. On the TV computer press **S**, paste the key under **YouTube search** and click **Save key**.
 
-The free allowance is about 100 searches a day; repeated searches are remembered for an hour and don't count again.
-When it runs out, phones say so and guests can still paste links.
+The free allowance is about 100 live searches a day. Repeated searches are remembered for 30 days and don't count
+again. When it runs out, phones say so and guests can still paste links.
+
+**Import whole karaoke channels and playlists (no daily limit for guests).** On the TV setup screen (press **S**), paste a
+channel link (`youtube.com/@name`) or a playlist link under **YouTube channels & playlists** and click **Import**. Every
+karaoke video in it joins the phones' **Songs** list, marked **YouTube**, next to your own files: search, the A–Z bar
+(with Hebrew letters) and the filters all work on them inside the app, so guests can search as much as they like.
+
+- Importing is cheap: about 2 units of the 10,000-unit daily allowance per 50 videos (one live search costs about 100),
+  so a 2,000-video channel takes about 80 units and less than a minute.
+- Each channel or playlist shows as a genre, so guests can browse just "שרים קריוקי", for example. Artist and song are
+  read from the video titles (the app works out which part is the artist for each channel).
+- Private videos and videos over 20 minutes (compilations) are left out. Imports are saved in `youtube-library.json`
+  next to the app; use **Update** now and then to pick up new uploads.
+- Imported YouTube songs only appear on phones while the TV has the extension, since that's what plays them.
 
 **During a YouTube song**, Pause, Restart and Skip from phones work as usual. When the song ends, the TV goes back to
 Karaoke Night by itself. To leave a song early, move the mouse and click **← Back to Karaoke Night**, or press **B**
@@ -188,6 +201,8 @@ If it happens every time, an old Karaoke Night window is probably still running.
 | `address` | Force the address shown to phones |
 | `ffmpeg` | Path to ffmpeg if it isn't found automatically |
 | `youtubeApiKey` | YouTube search key (set on the TV setup screen, press **S**) |
+
+Imported channels and playlists are kept in `youtube-library.json`, and remembered searches in `youtube-search-cache.json`.
 | `youtube` | `true` turns on YouTube links without the extension (they play embedded, which YouTube blocks for most karaoke videos) |
 
 A folder given on the command line (`node server.js "E:\Karaoke" 8080`) or with `SONG_DIR` in the start file
@@ -209,6 +224,7 @@ server.js            web server: song catalog, shared queue, live updates, media
 lib/zip.js           reads songs inside .zip files
 lib/media-info.js    reads genre tags and video sound formats
 lib/audio-fix.js     converts unplayable video sound with ffmpeg
+lib/youtube-library.js  imports YouTube channels and playlists into the song list
 public/tv.html       the TV screen (CDG player, videos, QR codes, setup)
 public/remote.html   the phone page (songs, queue, controls, alerts)
 public/cdg.js        CD+G decoder and lyric smoothing

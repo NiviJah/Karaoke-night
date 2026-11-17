@@ -132,6 +132,7 @@ li.letter { background: none; border: 0; padding: 10px 4px 0; font: 16px var(--d
         <button data-kind="all" aria-pressed="true">All</button>
         <button data-kind="cdg" aria-pressed="false">Karaoke</button>
         <button data-kind="video" aria-pressed="false">Video</button>
+        <button data-kind="youtube" aria-pressed="false">YouTube</button>
       </div>
       <select id="genre" aria-label="Genre" hidden><option value="">All genres</option></select>
       <select id="sort" aria-label="Sort by">
@@ -221,16 +222,23 @@ function songRow(s, right) {
   li.querySelector('.t').textContent = s.title;
   li.querySelector('.t').dir = li.querySelector('.a').dir = 'auto'; // Hebrew titles read right to left
   if (s.kind === 'video') li.querySelector('.t').insertAdjacentHTML('beforeend', '<span class="tag">Video</span>');
+  if (s.kind === 'youtube') li.querySelector('.t').insertAdjacentHTML('beforeend', '<span class="tag">YouTube</span>');
   li.querySelector('.a').textContent = s.artist;
   if (right) li.append(right);
   return li;
 }
 
 const LETTERS = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+const HEBREW = [...'אבגדהוזחטיכלמנסעפצקרשת'];
+const HEBREW_FINALS = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' };
 const indexLetter = name => {
-  const c = (name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().charAt(0).toUpperCase();
-  return c >= 'A' && c <= 'Z' ? c : '#';
+  const c = (name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().charAt(0).toUpperCase();
+  if (c >= 'A' && c <= 'Z') return c;
+  if (c >= 'א' && c <= 'ת') return HEBREW_FINALS[c] || c;
+  return '#';
 };
+// With Hebrew songs the bar would be too tall for every letter, so it shows only letters that have songs.
+const railLetters = () => HEBREW.some(L => L in letters) ? [...LETTERS, ...HEBREW].filter(L => L in letters) : LETTERS;
 const sortName = s => filters.sort === 'title' ? s.title : (s.artist || s.title);
 
 function renderResults() {
@@ -264,7 +272,7 @@ function renderResults() {
 function renderRail() {
   const rail = $('rail');
   rail.hidden = total < 20 || $('songsPane').hidden;
-  rail.innerHTML = LETTERS.map(L => `<span data-l="${L}" class="${L in letters ? '' : 'off'}">${L}</span>`).join('');
+  rail.innerHTML = railLetters().map(L => `<span data-l="${L}" class="${L in letters ? '' : 'off'}">${L}</span>`).join('');
 }
 
 const apiUrl = offset => `/api/songs?q=${encodeURIComponent(query)}&kind=${filters.kind}&genre=${encodeURIComponent(filters.genre)}&sort=${filters.sort}&offset=${offset}&limit=50`;
@@ -304,8 +312,11 @@ function renderGenres(list, counts) {
     sel.value = filters.genre;
   }
   sel.hidden = !list.length;
-  // Only offer the Karaoke/Video switch when the drive has both kinds.
-  $('kindChips').hidden = !(counts.video && counts.cdg);
+  // Only offer the type filter when there's more than one kind of song, and only the kinds there are.
+  for (const b of document.querySelectorAll('#kindChips button[data-kind]')) {
+    if (b.dataset.kind !== 'all') b.hidden = !counts[b.dataset.kind];
+  }
+  $('kindChips').hidden = [counts.video, counts.cdg, counts.youtube].filter(Boolean).length < 2;
 }
 
 let searchTimer;
@@ -331,7 +342,8 @@ function railPick(x, y) {
   if (!L || L === railLetter) return;
   railLetter = L;
   // a letter with no songs jumps to the next one that has some
-  const target = LETTERS.slice(LETTERS.indexOf(L)).find(l => l in letters) ?? [...LETTERS].reverse().find(l => l in letters);
+  const all = railLetters();
+  const target = all.slice(all.indexOf(L)).find(l => l in letters) ?? [...all].reverse().find(l => l in letters);
   $('bubble').textContent = L; $('bubble').hidden = false;
   clearTimeout(bubbleTimer); bubbleTimer = setTimeout(() => $('bubble').hidden = true, 700);
   if (target !== undefined) search(letters[target]);

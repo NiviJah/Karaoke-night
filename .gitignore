@@ -8,3 +8,5 @@ promo/renders/
 promo/*.mp4
 .DS_Store
 Thumbs.db
+youtube-library.json
+youtube-search-cache.json

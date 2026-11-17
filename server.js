@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const { readZipIndex, readZipEntry, zipDataStart } = require('./lib/zip');
 const { mp3Genre, mp4Info, SAFE_AUDIO, audioName } = require('./lib/media-info');
 const audioFix = require('./lib/audio-fix');
+const youtubeLibrary = require('./lib/youtube-library');
 
 const args = process.argv.slice(2);
 // Tidy up a folder path typed into a start script: stray spaces, quotes, and a bare drive letter.
@@ -54,7 +55,8 @@ const MIME = {
 
 /* ---------- Song catalog ---------- */
 
-let songs = [];              // sorted by artist, numbered
+let localSongs = [];         // songs found in the songs folder
+let songs = [];              // local songs plus imported YouTube songs, sorted by artist, numbered
 let songsByTitle = [];       // same songs sorted by title
 let genres = [];             // genres found, for the phone's filter
 let songsByKey = new Map();  // stable key -> song (survives rescans)
@@ -71,7 +73,8 @@ function parseName(name) {
 async function scan() {
   if (scanning) return;
   if (!songDirOk()) {
-    songs = []; songsByKey = new Map();
+    localSongs = [];
+    rebuildCatalog();
     console.log(SONG_DIR
       ? `Can't find the songs folder ${SONG_DIR} (set by ${SONG_DIR_SOURCE}). Choose it on the TV setup screen.`
       : 'No songs folder chosen yet. Open the TV screen to choose one.');
@@ -129,15 +132,22 @@ async function scan() {
     byKey.set(key, song);
   }
   await addMetadata(list);
+  localSongs = list;
+  scanning = false;
+  console.log(`Found ${list.length} songs in ${SONG_DIR} (${((Date.now() - started) / 1000).toFixed(1)}s)`);
+  rebuildCatalog();
+}
+
+// One song list: local files plus songs from imported YouTube channels and playlists.
+function rebuildCatalog() {
   const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+  const list = [...localSongs, ...ytLibrary.songs()];
   list.sort((a, b) => cmp(a.artist || a.title, b.artist || b.title) || cmp(a.title, b.title));
   list.forEach((s, i) => { s.number = i + 1; });
   songs = list;
   songsByTitle = [...list].sort((a, b) => cmp(a.title, b.title) || cmp(a.artist, b.artist));
   genres = [...new Set(list.map(s => s.genre).filter(Boolean))].sort(cmp);
-  songsByKey = byKey;
-  scanning = false;
-  console.log(`Found ${songs.length} songs in ${SONG_DIR} (${((Date.now() - started) / 1000).toFixed(1)}s)`);
+  songsByKey = new Map(list.map(s => [s.key, s]));
   broadcastState();
 }
 
@@ -180,18 +190,24 @@ async function addMetadata(list) {
   for (let i = 0; i < jobs.length; i += 16) await Promise.all(jobs.slice(i, i + 16).map(j => j()));
 }
 
-const publicSong = s => ({ key: s.key, number: s.number, artist: s.artist, title: s.title, kind: s.kind, genre: s.genre || '' });
+const publicSong = s => ({ key: s.key, number: s.number, artist: s.artist, title: s.title, kind: s.kind, genre: s.genre || '',
+  ...(s.youtube ? { youtube: s.youtube } : {}) });
 
 // A-Z index letter for a name: accents removed; digits and symbols go under '#'.
+const HEBREW_FINALS = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' };
 const indexLetter = name => {
   const c = (name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().charAt(0).toUpperCase();
-  return c >= 'A' && c <= 'Z' ? c : '#';
+  if (c >= 'A' && c <= 'Z') return c;
+  if (c >= 'א' && c <= 'ת') return HEBREW_FINALS[c] || c;
+  return '#';
 };
 
 function searchSongs({ q = '', kind = 'all', genre = '', sort = 'artist', offset = 0, limit = 50 }) {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const yt = youtubeEnabled(); // imported YouTube songs only show when the TV can play them
   const hits = (sort === 'title' ? songsByTitle : songs).filter(s =>
-    (kind === 'all' || s.kind === kind)
+    (yt || s.kind !== 'youtube')
+    && (kind === 'all' || s.kind === kind)
     && (!genre || s.genre === genre)
     && words.every(w => s.search.includes(w) || String(s.number) === w));
   const letters = {};
@@ -200,8 +216,12 @@ function searchSongs({ q = '', kind = 'all', genre = '', sort = 'artist', offset
     if (!(L in letters)) letters[L] = i;
   });
   return {
-    total: hits.length, offset, letters, genres,
-    counts: { video: songs.filter(s => s.kind === 'video').length, cdg: songs.filter(s => s.kind === 'cdg').length },
+    total: hits.length, offset, letters,
+    genres: yt ? genres : [...new Set(localSongs.map(s => s.genre).filter(Boolean))].sort(),
+    counts: {
+      video: songs.filter(s => s.kind === 'video').length, cdg: songs.filter(s => s.kind === 'cdg').length,
+      youtube: yt ? songs.filter(s => s.kind === 'youtube').length : 0,
+    },
     songs: hits.slice(offset, offset + limit).map(publicSong),
   };
 }
@@ -397,7 +417,22 @@ async function youtubeSong(link, hint = {}) {
    The free daily quota allows about 100 searches; repeated searches are answered from a 1-hour cache. */
 const YT_API = process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com/youtube/v3'; // overridable for tests
 const youtubeKey = () => String(loadConfig().youtubeApiKey || '').trim();
-const searchCache = new Map(); // query -> { at, results }
+// Search results are kept on disk for 30 days, so a repeated search costs nothing, even at the next party.
+const SEARCH_CACHE_FILE = path.join(__dirname, 'youtube-search-cache.json');
+const SEARCH_CACHE_DAYS = 30;
+const searchCache = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(SEARCH_CACHE_FILE, 'utf8'))); } catch { return []; } })());
+function saveSearchCache() {
+  const cutoff = Date.now() - SEARCH_CACHE_DAYS * 864e5;
+  for (const [q, v] of searchCache) if (v.at < cutoff) searchCache.delete(q);
+  while (searchCache.size > 1000) searchCache.delete(searchCache.keys().next().value);
+  try { fs.writeFileSync(SEARCH_CACHE_FILE, JSON.stringify(Object.fromEntries(searchCache))); } catch {}
+}
+
+// Imported channels and playlists (see lib/youtube-library.js): searched inside the app, no quota per search.
+const ytLibrary = youtubeLibrary.create({
+  file: path.join(__dirname, 'youtube-library.json'),
+  api: pathAndQuery => youtubeApi(pathAndQuery, youtubeKey()),
+});
 
 const decodeEntities = t => String(t || '').replace(/&(#\d+|#x[\da-f]+|amp|lt|gt|quot|apos);/gi, (m, e) =>
   e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1))
@@ -425,7 +460,7 @@ async function searchYoutube(q) {
   // Look for karaoke versions unless the guest already said so.
   const query = /karaoke|קריוקי/i.test(q) ? q : `${q} ${hebrew ? 'קריוקי' : 'karaoke'}`;
   const cached = searchCache.get(query);
-  if (cached && Date.now() - cached.at < 3600e3) return cached.results;
+  if (cached && Date.now() - cached.at < SEARCH_CACHE_DAYS * 864e5) return cached.results;
   const found = await youtubeApi(`search?part=snippet&type=video&maxResults=15&q=${encodeURIComponent(query)}${hebrew ? '&relevanceLanguage=he' : ''}`, key);
   const ids = (found.items || []).map(i => i.id?.videoId).filter(Boolean);
   const details = ids.length ? await youtubeApi(`videos?part=contentDetails&id=${ids.join(',')}`, key) : { items: [] };
@@ -438,6 +473,7 @@ async function searchYoutube(q) {
     seconds: seconds[i.id.videoId] || 0,
   })).filter(v => v.seconds === 0 || v.seconds < 20 * 60); // skip hour-long compilations
   searchCache.set(query, { at: Date.now(), results });
+  saveSearchCache();
   return results;
 }
 
@@ -457,7 +493,7 @@ async function handle(req, res) {
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
     const sp = url.searchParams;
     return json(res, 200, searchSongs({
-      q: sp.get('q') || '', kind: ['cdg', 'video'].includes(sp.get('kind')) ? sp.get('kind') : 'all',
+      q: sp.get('q') || '', kind: ['cdg', 'video', 'youtube'].includes(sp.get('kind')) ? sp.get('kind') : 'all',
       genre: sp.get('genre') || '', sort: sp.get('sort') === 'title' ? 'title' : 'artist', offset, limit,
     }));
   }
@@ -483,6 +519,7 @@ async function handle(req, res) {
     } else {
       const found = songsByKey.get(body.key);
       if (!found) return json(res, 404, { error: 'That song is no longer in the catalog.' });
+      if (found.kind === 'youtube' && !youtubeEnabled()) return json(res, 400, { error: 'YouTube songs need the TV with the Karaoke Night extension.' });
       song = publicSong(found);
       audioFix.request(found); // start fixing silent-video sound now, so it's ready by this singer's turn
     }
@@ -521,12 +558,32 @@ async function handle(req, res) {
 
   if (m === 'POST' && p === '/api/rescan') { scan(); return json(res, 200, { ok: true }); }
 
-  if (p === '/api/settings' || p === '/api/browse') {
+  if (p === '/api/settings' || p === '/api/browse' || p.startsWith('/api/youtube/sources')) {
     if (!isLocal(req)) return json(res, 403, { error: 'Setup is only available on the computer running Karaoke Night.' });
     if (m === 'GET' && p === '/api/settings') return json(res, 200, settings());
     if (m === 'GET' && p === '/api/browse') {
       try { return json(res, 200, await browse(url.searchParams.get('dir') || '')); }
       catch (err) { return json(res, 400, { error: `Can't open that folder: ${err.message}` }); }
+    }
+    // Imported YouTube channels and playlists
+    if (m === 'GET' && p === '/api/youtube/sources') return json(res, 200, { sources: ytLibrary.sources(), hasKey: !!youtubeKey() });
+    if (p.startsWith('/api/youtube/sources')) {
+      if (!youtubeKey()) return json(res, 400, { error: 'Save a YouTube key first.' });
+      const sm = /^\/api\/youtube\/sources\/([\w-]+)(\/refresh)?$/.exec(p);
+      try {
+        if (m === 'POST' && p === '/api/youtube/sources') {
+          const src = await ytLibrary.importLink((await readBody(req)).link);
+          console.log(`Imported ${src.count} YouTube songs from "${src.title}".`);
+        } else if (m === 'POST' && sm && sm[2]) {
+          await ytLibrary.refresh(sm[1]);
+        } else if (m === 'DELETE' && sm && !sm[2]) {
+          ytLibrary.remove(sm[1]);
+        } else return json(res, 404, { error: 'Not found' });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+      rebuildCatalog();
+      return json(res, 200, { sources: ytLibrary.sources(), hasKey: true });
     }
     if (m === 'POST' && p === '/api/settings' && url.searchParams.get('youtubeKey') !== null) {
       const key = String((await readBody(req)).youtubeApiKey || '').trim();

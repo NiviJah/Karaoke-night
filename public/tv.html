@@ -57,7 +57,13 @@ canvas { max-width: 100%; max-height: 100%; aspect-ratio: 300 / 216; width: auto
 #setup .row .use { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 #setup .msg { font-size: 2.4vh; color: var(--muted); margin: 0; min-height: 1.4em; }
 #setup .msg.err { color: #ff7a8a; }
-#setup .list { max-height: 34vh; }
+#setup .list { max-height: 26vh; }
+#setup { overflow-y: auto; }
+#setup .srclist { display: grid; gap: .8vh; }
+#setup .src { display: flex; align-items: center; gap: 1.2vh; background: var(--panel); border: 1px solid var(--line); border-radius: 1vh; padding: 1vh 1.6vh; font-size: 2.2vh; }
+#setup .src .name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+#setup .src .info { flex: 1; color: var(--muted); white-space: nowrap; }
+#setup .src button { font: 600 2vh var(--body); color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: .8vh; padding: .8vh 1.4vh; cursor: pointer; }
 #setup .ytkey { border-top: 1px solid var(--line); padding-top: 1.6vh; display: grid; gap: 1vh; }
 #setup .ytkey input { flex: 1; min-width: 0; font: 2.4vh var(--body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 1vh; padding: 1.2vh 1.6vh; }
 #vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
@@ -118,6 +124,15 @@ canvas { max-width: 100%; max-height: 100%; aspect-ratio: 300 / 216; width: auto
           <button id="ytKeySave">Save key</button>
         </div>
         <p class="msg" id="ytKeyMsg">Lets guests search YouTube inside the app. The README explains how to get a free key.</p>
+      </div>
+      <div class="ytkey">
+        <span class="label">YouTube channels &amp; playlists</span>
+        <div class="row">
+          <input id="ytSrcLink" placeholder="Paste a channel (youtube.com/@name) or playlist link" autocomplete="off" spellcheck="false">
+          <button id="ytSrcAdd">Import</button>
+        </div>
+        <p class="msg" id="ytSrcMsg">Imported songs show in the phones' song list and can be searched with no daily limit.</p>
+        <div class="srclist" id="ytSrcList"></div>
       </div>
     </div>
   </div>
@@ -520,11 +535,59 @@ async function openSetup() {
   $('setupClose').hidden = !s.ok;
   $('ytKey').value = '';
   $('ytKey').placeholder = s.youtubeKey ? 'Key saved. Paste a new one to replace it' : 'Paste a YouTube Data API key';
+  loadSources();
   await browseTo(s.ok ? s.songDir : '');
   if (s.songDir && !s.ok) setupMsg(`Can't find ${s.songDir} (set by ${s.source}). Is the drive plugged in? Choose the folder below.`, true);
 }
 
 $('setupUp').onclick = () => browseTo(browseParent || '');
+/* Imported YouTube channels and playlists */
+const srcMsg = (t, err) => { $('ytSrcMsg').textContent = t; $('ytSrcMsg').classList.toggle('err', !!err); };
+function renderSources(list) {
+  const box = $('ytSrcList');
+  box.innerHTML = '';
+  for (const src of list) {
+    const row = document.createElement('div');
+    row.className = 'src';
+    row.innerHTML = '<span class="name" dir="auto"></span><span class="info"></span><button>Update</button><button>Remove</button>';
+    row.querySelector('.name').textContent = src.title;
+    row.querySelector('.info').textContent = `${src.count.toLocaleString()} songs · imported ${new Date(src.importedAt).toLocaleDateString()}`;
+    const [upd, rm] = row.querySelectorAll('button');
+    upd.onclick = () => sourceAction(`/api/youtube/sources/${src.id}/refresh`, 'POST', `Updating "${src.title}"…`, `Updated "${src.title}".`);
+    rm.onclick = () => {
+      if (rm.textContent !== 'Sure?') { rm.textContent = 'Sure?'; setTimeout(() => { rm.textContent = 'Remove'; }, 3000); return; }
+      sourceAction(`/api/youtube/sources/${src.id}`, 'DELETE', 'Removing…', `Removed "${src.title}".`);
+    };
+    box.append(row);
+  }
+}
+async function loadSources() {
+  const j = await fetch('/api/youtube/sources').then(r => r.json()).catch(() => null);
+  if (j?.sources) renderSources(j.sources);
+}
+async function sourceAction(url, method, busy, done, body) {
+  srcMsg(busy);
+  $('ytSrcAdd').disabled = true;
+  try {
+    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'That didn\'t work.');
+    renderSources(j.sources);
+    srcMsg(typeof done === 'function' ? done(j) : done);
+    return true;
+  } catch (err) { srcMsg(err.message, true); return false; }
+  finally { $('ytSrcAdd').disabled = false; }
+}
+$('ytSrcAdd').onclick = async () => {
+  const link = $('ytSrcLink').value.trim();
+  if (!link) return srcMsg('Paste a YouTube channel or playlist link first.', true);
+  const ok = await sourceAction('/api/youtube/sources', 'POST', 'Importing… a big channel can take a minute.', j => {
+    const src = j.sources.at(-1);
+    return `Imported ${src.count.toLocaleString()} songs from "${src.title}".`;
+  }, { link });
+  if (ok) $('ytSrcLink').value = '';
+};
+
 $('ytKeySave').onclick = async () => {
   const msg = (t, err) => { $('ytKeyMsg').textContent = t; $('ytKeyMsg').classList.toggle('err', !!err); };
   msg('Checking the key with YouTube…');
