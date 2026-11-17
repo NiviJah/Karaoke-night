@@ -128,7 +128,7 @@ canvas { max-width: 100%; max-height: 100%; aspect-ratio: 300 / 216; width: auto
       <div class="ytkey">
         <span class="label">YouTube channels &amp; playlists</span>
         <div class="row">
-          <input id="ytSrcLink" placeholder="Paste a channel (youtube.com/@name) or playlist link" autocomplete="off" spellcheck="false">
+          <input id="ytSrcLink" placeholder="Channel name, channel link (youtube.com/@name) or playlist link" autocomplete="off" spellcheck="false" dir="auto">
           <button id="ytSrcAdd">Import</button>
         </div>
         <p class="msg" id="ytSrcMsg">Imported songs show in the phones' song list and can be searched with no daily limit.</p>
@@ -580,7 +580,7 @@ async function sourceAction(url, method, busy, done, body) {
 }
 $('ytSrcAdd').onclick = async () => {
   const link = $('ytSrcLink').value.trim();
-  if (!link) return srcMsg('Paste a YouTube channel or playlist link first.', true);
+  if (!link) return srcMsg('Type a channel name, or paste a channel or playlist link.', true);
   const ok = await sourceAction('/api/youtube/sources', 'POST', 'Importing… a big channel can take a minute.', j => {
     const src = j.sources.at(-1);
     return `Imported ${src.count.toLocaleString()} songs from "${src.title}".`;

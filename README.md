@@ -99,8 +99,9 @@ To get a key (about 5 minutes, free, needs a Google account):
 The free allowance is about 100 live searches a day. Repeated searches are remembered for 30 days and don't count
 again. When it runs out, phones say so and guests can still paste links.
 
-**Import whole karaoke channels and playlists (no daily limit for guests).** On the TV setup screen (press **S**), paste a
-channel link (`youtube.com/@name`) or a playlist link under **YouTube channels & playlists** and click **Import**. Every
+**Import whole karaoke channels and playlists (no daily limit for guests).** On the TV setup screen (press **S**), type a
+channel's name (for example `שרים קריוקי`) or paste a channel link (`youtube.com/@name`) or playlist link under
+**YouTube channels & playlists**, and click **Import**. (A name costs one search to look up; a link costs nothing extra.) Every
 karaoke video in it joins the phones' **Songs** list, marked **YouTube**, next to your own files: search, the A–Z bar
 (with Hebrew letters) and the filters all work on them inside the app, so guests can search as much as they like.
 
