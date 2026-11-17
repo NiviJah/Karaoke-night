@@ -82,11 +82,26 @@ ends. Nothing is downloaded or stored.
 4. Optional but recommended: on youtube.com, click the icon left of the address, open **Site settings** and set
    **Sound** to **Allow**, so songs start without a click.
 
-Then open the TV page as usual. Phones get a **YouTube** tab automatically: guests tap **Search YouTube** to find a
-karaoke version (Hebrew song names search for "קריוקי"), copy the video's link with **Share → Copy link**, paste it and tap **Add**.
+Then open the TV page as usual. Phones get a **YouTube** tab automatically.
 
-During a YouTube song, Pause, Restart and Skip from phones work as usual, and **N** on the TV computer skips.
-If YouTube can't play a video (private, removed, or a sign-in page), the TV says so and moves on.
+**Search inside the app (recommended).** With a free YouTube search key, guests type a song in the YouTube tab and tap
+**Add** on a result; karaoke versions are searched for automatically ("קריוקי" for Hebrew), and hour-long compilations
+are left out. Without a key, guests find the video in the YouTube app, copy its link (**Share → Copy link**) and paste it.
+
+To get a key (about 5 minutes, free, needs a Google account):
+
+1. Open [console.cloud.google.com](https://console.cloud.google.com) and create a project (any name).
+2. Go to **APIs & Services → Library**, search for **YouTube Data API v3** and click **Enable**.
+3. Go to **APIs & Services → Credentials → Create credentials → API key** and copy the key.
+   (Optional: edit the key and restrict it to YouTube Data API v3.)
+4. On the TV computer press **S**, paste the key under **YouTube search** and click **Save key**.
+
+The free allowance is about 100 searches a day; repeated searches are remembered for an hour and don't count again.
+When it runs out, phones say so and guests can still paste links.
+
+**During a YouTube song**, Pause, Restart and Skip from phones work as usual. When the song ends, the TV goes back to
+Karaoke Night by itself. To leave a song early, move the mouse and click **← Back to Karaoke Night**, or press **B**
+(or **N**) on the TV computer. If YouTube can't play a video (private, removed, or a sign-in page), the TV says so and moves on.
 
 Things to know: YouTube songs need internet (a phone hotspot is fine), YouTube's ads may play without Premium, and if
 YouTube changes its page design the extension may need an update. The extension only takes over the tab it opened;
@@ -172,6 +187,7 @@ If it happens every time, an old Karaoke Night window is probably still running.
 | `songDir` | The songs folder (set by the TV setup screen) |
 | `address` | Force the address shown to phones |
 | `ffmpeg` | Path to ffmpeg if it isn't found automatically |
+| `youtubeApiKey` | YouTube search key (set on the TV setup screen, press **S**) |
 | `youtube` | `true` turns on YouTube links without the extension (they play embedded, which YouTube blocks for most karaoke videos) |
 
 A folder given on the command line (`node server.js "E:\Karaoke" 8080`) or with `SONG_DIR` in the start file

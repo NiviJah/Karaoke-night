@@ -214,14 +214,15 @@ let status = { state: 'idle', time: 0, duration: 0 };
 let nextId = 1;
 const listeners = new Set();
 
-const state = () => ({ nowPlaying, queue, status, songCount: songs.length, scanning, setupNeeded: !songDirOk(), youtube: youtubeEnabled() });
+const state = () => ({ nowPlaying, queue, status, songCount: songs.length, scanning, setupNeeded: !songDirOk(),
+  youtube: youtubeEnabled(), youtubeSearch: youtubeEnabled() && !!youtubeKey() });
 
 /* ---------- Setup (only from the computer running the server) ---------- */
 
 const isLocal = req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 
 function settings() {
-  return { songDir: SONG_DIR, source: SONG_DIR_SOURCE, ok: songDirOk(), songCount: songs.length, scanning };
+  return { songDir: SONG_DIR, source: SONG_DIR_SOURCE, ok: songDirOk(), songCount: songs.length, scanning, youtubeKey: !!youtubeKey() };
 }
 
 // Lists drives (when dir is empty) or the subfolders of dir, for the TV's folder picker.
@@ -374,10 +375,11 @@ function youtubeId(link) {
   return id && /^[\w-]{11}$/.test(id) ? id : null;
 }
 
-async function youtubeSong(link) {
-  const id = youtubeId(link);
+// hint: title and channel from in-app search results, used if YouTube's oEmbed doesn't give them.
+async function youtubeSong(link, hint = {}) {
+  const id = youtubeId(link) || (/^[\w-]{11}$/.test(link) ? link : null);
   if (!id) return { error: "That doesn't look like a YouTube video link. Copy it from the Share button in YouTube." };
-  let title = 'YouTube video', artist = 'YouTube';
+  let title = String(hint.title || '').slice(0, 200) || 'YouTube video', artist = String(hint.channel || '').slice(0, 100) || 'YouTube';
   try {
     const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}`,
       { signal: AbortSignal.timeout(6000) });
@@ -388,6 +390,55 @@ async function youtubeSong(link) {
     // No internet on this computer, or YouTube didn't answer: still queue it; the TV will report if it can't play.
   }
   return { song: { key: `yt-${id}`, number: 'YT', artist, title, youtube: id } };
+}
+
+/* ---------- YouTube search inside the app ----------
+   Uses YouTube's official search API with a free key (config.json "youtubeApiKey", set on the TV setup screen).
+   The free daily quota allows about 100 searches; repeated searches are answered from a 1-hour cache. */
+const YT_API = process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com/youtube/v3'; // overridable for tests
+const youtubeKey = () => String(loadConfig().youtubeApiKey || '').trim();
+const searchCache = new Map(); // query -> { at, results }
+
+const decodeEntities = t => String(t || '').replace(/&(#\d+|#x[\da-f]+|amp|lt|gt|quot|apos);/gi, (m, e) =>
+  e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1))
+    : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
+const isoSeconds = d => { const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d || ''); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0; };
+
+async function youtubeApi(pathAndQuery, key) {
+  const r = await fetch(`${YT_API}/${pathAndQuery}&key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(8000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const reason = j.error?.errors?.[0]?.reason || '';
+    const err = new Error(/quota/i.test(reason) ? "Today's YouTube search limit is used up. Paste links instead until tomorrow."
+      : /key|forbidden|denied/i.test(reason + ' ' + (j.error?.message || '')) ? 'The YouTube search key was refused. Check it on the TV setup screen (press S).'
+      : `YouTube search failed (${j.error?.message || r.status}).`);
+    err.reason = reason;
+    throw err;
+  }
+  return j;
+}
+
+async function searchYoutube(q) {
+  const key = youtubeKey();
+  if (!key) throw Object.assign(new Error('In-app YouTube search needs a key. The host can add one on the TV setup screen (press S).'), { reason: 'noKey' });
+  const hebrew = /[\u0590-\u05FF]/.test(q);
+  // Look for karaoke versions unless the guest already said so.
+  const query = /karaoke|קריוקי/i.test(q) ? q : `${q} ${hebrew ? 'קריוקי' : 'karaoke'}`;
+  const cached = searchCache.get(query);
+  if (cached && Date.now() - cached.at < 3600e3) return cached.results;
+  const found = await youtubeApi(`search?part=snippet&type=video&maxResults=15&q=${encodeURIComponent(query)}${hebrew ? '&relevanceLanguage=he' : ''}`, key);
+  const ids = (found.items || []).map(i => i.id?.videoId).filter(Boolean);
+  const details = ids.length ? await youtubeApi(`videos?part=contentDetails&id=${ids.join(',')}`, key) : { items: [] };
+  const seconds = Object.fromEntries((details.items || []).map(v => [v.id, isoSeconds(v.contentDetails?.duration)]));
+  const results = (found.items || []).filter(i => i.id?.videoId).map(i => ({
+    id: i.id.videoId,
+    title: decodeEntities(i.snippet?.title),
+    channel: decodeEntities(i.snippet?.channelTitle),
+    thumb: i.snippet?.thumbnails?.medium?.url || i.snippet?.thumbnails?.default?.url || '',
+    seconds: seconds[i.id.videoId] || 0,
+  })).filter(v => v.seconds === 0 || v.seconds < 20 * 60); // skip hour-long compilations
+  searchCache.set(query, { at: Date.now(), results });
+  return results;
 }
 
 async function handle(req, res) {
@@ -426,7 +477,7 @@ async function handle(req, res) {
     let song;
     if (body.youtube) {
       if (!youtubeEnabled()) return json(res, 400, { error: 'YouTube links are turned off on this karaoke machine.' });
-      const yt = await youtubeSong(body.youtube);
+      const yt = await youtubeSong(body.youtube, { title: body.title, channel: body.channel });
       if (yt.error) return json(res, 400, { error: yt.error });
       song = yt.song;
     } else {
@@ -477,6 +528,18 @@ async function handle(req, res) {
       try { return json(res, 200, await browse(url.searchParams.get('dir') || '')); }
       catch (err) { return json(res, 400, { error: `Can't open that folder: ${err.message}` }); }
     }
+    if (m === 'POST' && p === '/api/settings' && url.searchParams.get('youtubeKey') !== null) {
+      const key = String((await readBody(req)).youtubeApiKey || '').trim();
+      if (key) {
+        try { await youtubeApi('search?part=id&type=video&maxResults=1&q=karaoke', key); }
+        catch (err) { return json(res, 400, { error: err.reason === 'quotaExceeded' ? err.message : "YouTube didn't accept that key. Check that it's copied in full and that YouTube Data API v3 is enabled for it." }); }
+      }
+      saveConfig({ ...loadConfig(), youtubeApiKey: key || undefined });
+      searchCache.clear();
+      console.log(key ? 'YouTube search key saved.' : 'YouTube search key removed.');
+      broadcastState();
+      return json(res, 200, settings());
+    }
     if (m === 'POST' && p === '/api/settings') {
       const dir = cleanDir((await readBody(req)).songDir);
       if (!dir || !isFolder(path.resolve(dir))) return json(res, 400, { error: `Can't find the folder "${dir}".` });
@@ -511,6 +574,14 @@ async function handle(req, res) {
     if (status.state === 'idle') nowPlaying = null;
     broadcast('status', status);
     return json(res, 200, { ok: true });
+  }
+
+  if (m === 'GET' && p === '/api/youtube/search') {
+    if (!youtubeEnabled()) return json(res, 400, { error: 'YouTube is off on this karaoke machine.' });
+    const q = (url.searchParams.get('q') || '').trim().slice(0, 100);
+    if (!q) return json(res, 400, { error: 'Type a song to search for.' });
+    try { return json(res, 200, { results: await searchYoutube(q) }); }
+    catch (err) { return json(res, err.reason === 'noKey' ? 409 : 502, { error: err.message, noKey: err.reason === 'noKey' }); }
   }
 
   // The TV asks whether a video's sound is playable / being converted.

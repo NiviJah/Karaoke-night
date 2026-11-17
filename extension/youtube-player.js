@@ -27,6 +27,12 @@
     #kn-click { position: fixed; inset: 0; z-index: 2147483600; display: grid; place-content: center; text-align: center;
       background: rgba(16, 14, 28, .9); color: #ffb547; font: 800 6vh/1.3 system-ui, sans-serif; cursor: pointer; }
     #kn-click small { display: block; color: #ece9fb; font-weight: 500; font-size: 3vh; }
+    #kn-back { position: fixed; top: 3vh; left: 3vh; z-index: 2147483500; padding: 1.4vh 2.4vh; border: 0; border-radius: 1.2vh;
+      background: rgba(16, 14, 28, .88); color: #ffb547; font: 700 2.6vh/1 system-ui, sans-serif; cursor: pointer;
+      opacity: 0; transition: opacity .3s; }
+    #kn-back small { color: #ece9fb; font-weight: 500; margin-left: 1vh; }
+    html.kn-show #kn-back, #kn-back:focus-visible { opacity: 1; }
+    html:not(.kn-show) { cursor: none; }
   `;
   (document.head || document.documentElement).append(style);
 
@@ -52,6 +58,28 @@
     }
   }
 
+  // YouTube often just stops at the end without firing "ended": also check its own ended state
+  // (the player's ended-mode class) and a video sitting paused at its last moment.
+  const atEnd = () => {
+    if (!video || isAd()) return false;
+    if (player()?.classList.contains('ended-mode')) return true;
+    const d = video.duration;
+    return d > 0 && isFinite(d) && video.paused && video.currentTime >= d - 0.75;
+  };
+
+  // "Back to Karaoke Night": ends this YouTube song early and returns to the app. Shows when the mouse moves.
+  const back = document.createElement('button');
+  back.id = 'kn-back';
+  back.innerHTML = '← Back to Karaoke Night<small>(B)</small>';
+  back.addEventListener('click', () => finish('key', { key: 'skip' }));
+  document.documentElement.append(back);
+  let hideTimer;
+  document.addEventListener('mousemove', () => {
+    document.documentElement.classList.add('kn-show');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => document.documentElement.classList.remove('kn-show'), 3000);
+  }, true);
+
   // If Chrome blocked autoplay with sound, one click on the TV starts it.
   function askForClick() {
     if (document.getElementById('kn-click')) return;
@@ -72,6 +100,7 @@
       return finish('error', { reason: (err.textContent || 'YouTube can\'t play this video.').replace(/\s+/g, ' ').trim().slice(0, 160) });
     }
     if (!video) return;
+    if (playedOnce && atEnd()) return finish('ended');
     if (!playedOnce && video.paused && !isAd() && !userPaused && Date.now() - started > 5000) {
       video.play().catch(askForClick);
     }
@@ -86,8 +115,9 @@
     else if (msg.action === 'restart') { video.currentTime = 0; video.play().catch(askForClick); }
   });
 
-  // N skips to the next singer, as on the TV page. (Space already pauses YouTube.)
+  // N (next singer, as on the TV page) or B (back to Karaoke Night) ends the song. Space already pauses YouTube.
   document.addEventListener('keydown', e => {
-    if ((e.key === 'n' || e.key === 'N') && !e.target.closest?.('input, textarea, [contenteditable]')) finish('key', { key: 'skip' });
+    if (e.target.closest?.('input, textarea, [contenteditable]')) return;
+    if (['n', 'N', 'b', 'B'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); finish('key', { key: 'skip' }); }
   }, true);
 })();

@@ -60,6 +60,11 @@ li button { padding: 8px 12px; flex: none; }
 .empty { color: var(--muted); padding: 16px 4px; }
 .yt { display: grid; gap: 10px; }
 .yt p { margin: 0; color: var(--muted); font-size: 14px; }
+#ytResults li { align-items: flex-start; }
+#ytResults img { width: 112px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; flex: none; background: var(--line); }
+#ytResults .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14px; }
+#ytResults button { align-self: center; }
+.yt .or { margin-top: 6px; }
 .yt ol li { display: list-item; background: none; border: 0; border-radius: 0; padding: 0; } /* not song-list cards */
 .ytfind { display: flex; gap: 8px; margin-top: 8px; }
 .ytfind input { flex: 1; min-width: 0; padding: 9px 10px; font-size: 15px; }
@@ -142,7 +147,16 @@ li.letter { background: none; border: 0; padding: 10px 4px 0; font: 16px var(--d
   </section>
 
   <section id="ytPane" class="yt" hidden>
-    <ol>
+    <div id="ytSearchBox" class="yt" hidden>
+      <div class="ytfind">
+        <input type="search" id="ytQ" placeholder="Search YouTube, e.g. Dancing Queen" autocomplete="off" enterkeyhint="search" dir="auto">
+        <button class="primary" id="ytGo">Search</button>
+      </div>
+      <p id="ytNote">Karaoke versions are searched for you.</p>
+      <ul id="ytResults"></ul>
+      <p class="or">Or paste a YouTube link:</p>
+    </div>
+    <ol id="ytManual">
       <li>Find a karaoke version on YouTube:
         <div class="ytfind">
           <input type="search" id="ytFind" placeholder="Song name, e.g. Dancing Queen" autocomplete="off" enterkeyhint="search" dir="auto">
@@ -476,6 +490,8 @@ function connect() {
     state = JSON.parse(e.data);
     renderQueue(); renderNow(); checkMyTurn();
     $('tabYt').hidden = !state.youtube;
+    $('ytSearchBox').hidden = !state.youtubeSearch;
+    $('ytManual').hidden = !!state.youtubeSearch;
     if (!state.youtube && !$('ytPane').hidden) showTab('songs');
     if (prevCount !== state.songCount) search();
   });
@@ -534,7 +550,42 @@ $('alertOk').onclick = () => { $('alert').hidden = true; buzz(0); };
 
 fetch('/api/info').then(r => r.json()).then(info => { $('tabYt').hidden = !info.youtube; }).catch(() => {});
 
-// Opens YouTube (the app, on most phones) searching for a karaoke version.
+/* In-app YouTube search (when the host saved a key on the TV setup screen). */
+const fmtLen = sec => sec ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : '';
+async function ytSearch() {
+  const q = $('ytQ').value.trim();
+  if (!q) { toast('Type a song to search for'); $('ytQ').focus(); return; }
+  $('ytQ').blur(); // hide the phone keyboard so results are visible
+  $('ytGo').disabled = true; $('ytNote').textContent = 'Searching YouTube…';
+  const ul = $('ytResults');
+  try {
+    const r = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Search failed');
+    ul.innerHTML = '';
+    if (!j.results.length) ul.innerHTML = '<li class="empty">Nothing found. Try the song and artist name.</li>';
+    for (const v of j.results) {
+      const li = document.createElement('li');
+      li.innerHTML = `<img alt="" loading="lazy"><span class="txt"><div class="t" dir="auto"></div><div class="a" dir="auto"></div></span>`;
+      li.querySelector('img').src = v.thumb;
+      li.querySelector('.t').textContent = v.title;
+      li.querySelector('.a').textContent = [v.channel, fmtLen(v.seconds)].filter(Boolean).join(' · ');
+      const btn = document.createElement('button');
+      btn.className = 'primary'; btn.textContent = 'Add';
+      btn.onclick = async () => { if (await addSong(null, btn, { youtube: v.id, title: v.title, channel: v.channel })) btn.textContent = 'Added'; };
+      li.append(btn);
+      ul.append(li);
+    }
+    $('ytNote').textContent = 'Karaoke versions are searched for you.';
+  } catch (err) {
+    $('ytNote').textContent = err.message;
+  }
+  $('ytGo').disabled = false;
+}
+$('ytGo').onclick = ytSearch;
+$('ytQ').addEventListener('keydown', e => { if (e.key === 'Enter') ytSearch(); });
+
+// Without a search key: open YouTube (the app, on most phones) searching for a karaoke version.
 $('ytFindBtn').onclick = () => {
   const q = $('ytFind').value.trim();
   if (!q) { toast('Type a song name first'); $('ytFind').focus(); return; }

@@ -57,6 +57,9 @@ canvas { max-width: 100%; max-height: 100%; aspect-ratio: 300 / 216; width: auto
 #setup .row .use { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 #setup .msg { font-size: 2.4vh; color: var(--muted); margin: 0; min-height: 1.4em; }
 #setup .msg.err { color: #ff7a8a; }
+#setup .list { max-height: 34vh; }
+#setup .ytkey { border-top: 1px solid var(--line); padding-top: 1.6vh; display: grid; gap: 1vh; }
+#setup .ytkey input { flex: 1; min-width: 0; font: 2.4vh var(--body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 1vh; padding: 1.2vh 1.6vh; }
 #vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 #ytWrap { position: absolute; inset: 0; background: #000; }
 #ytWrap iframe, #ytWrap > div { width: 100%; height: 100%; border: 0; display: block; }
@@ -108,6 +111,14 @@ canvas { max-width: 100%; max-height: 100%; aspect-ratio: 300 / 216; width: auto
       </div>
       <p class="msg" id="setupMsg"></p>
       <div class="list" id="setupList"></div>
+      <div class="ytkey">
+        <span class="label">YouTube search (optional)</span>
+        <div class="row">
+          <input id="ytKey" placeholder="Paste a YouTube Data API key" autocomplete="off" spellcheck="false">
+          <button id="ytKeySave">Save key</button>
+        </div>
+        <p class="msg" id="ytKeyMsg">Lets guests search YouTube inside the app. The README explains how to get a free key.</p>
+      </div>
     </div>
   </div>
 
@@ -507,11 +518,23 @@ async function openSetup() {
   if (!s || s.error) return; // not on the server computer
   $('setup').hidden = false;
   $('setupClose').hidden = !s.ok;
+  $('ytKey').value = '';
+  $('ytKey').placeholder = s.youtubeKey ? 'Key saved. Paste a new one to replace it' : 'Paste a YouTube Data API key';
   await browseTo(s.ok ? s.songDir : '');
   if (s.songDir && !s.ok) setupMsg(`Can't find ${s.songDir} (set by ${s.source}). Is the drive plugged in? Choose the folder below.`, true);
 }
 
 $('setupUp').onclick = () => browseTo(browseParent || '');
+$('ytKeySave').onclick = async () => {
+  const msg = (t, err) => { $('ytKeyMsg').textContent = t; $('ytKeyMsg').classList.toggle('err', !!err); };
+  msg('Checking the key with YouTube…');
+  const r = await fetch('/api/settings?youtubeKey', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ youtubeApiKey: $('ytKey').value.trim() }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return msg(j.error || 'Could not save the key.', true);
+  $('ytKey').value = '';
+  $('ytKey').placeholder = j.youtubeKey ? 'Key saved. Paste a new one to replace it' : 'Paste a YouTube Data API key';
+  msg(j.youtubeKey ? 'Saved. Guests can now search YouTube on their phones.' : 'Key removed. Guests paste YouTube links instead.');
+};
 $('setupClose').onclick = () => { $('setup').hidden = true; };
 $('setupUse').onclick = async () => {
   setupMsg('Looking for songs…');

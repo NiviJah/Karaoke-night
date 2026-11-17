@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Karaoke Night – YouTube player",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lets the Karaoke Night TV screen play queued YouTube songs on youtube.com, full screen, and come back when they end.",
   "permissions": ["storage"],
   "background": { "service_worker": "background.js" },
