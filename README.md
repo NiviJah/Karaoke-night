@@ -110,7 +110,7 @@ karaoke video in it joins the phones' **Songs** list, marked **YouTube**, next t
 - Each channel or playlist shows as a genre, so guests can browse just "שרים קריוקי", for example. Artist and song are
   read from the video titles (the app works out which part is the artist for each channel).
 - Private videos and videos over 20 minutes (compilations) are left out. Imports are saved in `youtube-library.json`
-  next to the app; use **Update** now and then to pick up new uploads.
+  in your saved-data folder (kept across restarts and updates); use **Update** now and then to pick up new uploads.
 - Imported YouTube songs only appear on phones while the TV has the extension, since that's what plays them.
 
 With the extension, **Start** puts the whole browser window in full screen (like F11), so it stays full screen while
@@ -176,7 +176,7 @@ singers and a QR code for adding songs.
 
 **Videos play without sound.** Some karaoke videos (often from DVDs) have Dolby AC-3 / E-AC-3 sound, which browsers
 play silently. Install **ffmpeg** once and restart; Karaoke Night then converts just the sound (your original files are
-never changed, copies go in the `converted` folder, which is safe to delete):
+never changed, copies go in a `converted` folder inside your saved-data folder, which is safe to delete):
 
 - Windows: `winget install Gyan.FFmpeg` in Command Prompt, then reopen the start file.
 - Mac: `brew install ffmpeg`.
@@ -184,7 +184,8 @@ never changed, copies go in the `converted` folder, which is safe to delete):
 The window says `ffmpeg: found` when it's ready. Without ffmpeg, the TV tells you when a video's sound can't play.
 
 **Phones can't open the address.** The computer may have extra virtual network adapters (VPN, WSL, Hyper-V, Docker).
-The window lists every address; if the one on the TV doesn't work, add the right one to `config.json`:
+The window lists every address; if the one on the TV doesn't work, add the right one to `config.json` (in the
+saved-data folder, see [Your saved data](#your-saved-data)):
 
 ```
 {
@@ -197,6 +198,19 @@ The window lists every address; if the one on the TV doesn't work, add the right
 If it happens every time, an old Karaoke Night window is probably still running.
 
 **Can't find the songs folder.** Check the drive is plugged in, then press **S** on the TV to choose it again.
+
+## Your saved data
+
+Your settings (`config.json`: songs folder, YouTube key), imported YouTube channels (`youtube-library.json`),
+remembered searches and converted videos are kept in a data folder outside the app, so **updating the app never loses
+them** and channels never need importing again:
+
+- Windows: `%APPDATA%\Karaoke Night` (paste that into File Explorer's address bar)
+- Mac: `~/Library/Application Support/Karaoke Night`
+- Linux: `~/.config/karaoke-night`
+
+The app window prints the exact location when it starts ("Saved data: ..."). Versions before this one kept these files
+in the app folder; the first start copies them over. To install an update, just replace the app folder.
 
 ## Other options (`config.json`)
 

@@ -490,6 +490,8 @@ function connect() {
   const es = new EventSource('/api/events');
   es.addEventListener('state', e => {
     state = JSON.parse(e.data);
+    // The app was restarted: tell it straight away that this TV has the YouTube extension.
+    if (ext.ready && !state.youtube) post('/api/player/caps', { youtubeExtension: true }).catch(() => {});
     renderBar();
     $('idleCount').textContent = state.songCount ? `${state.songCount.toLocaleString()} songs ready.` : (state.scanning ? 'Looking for songs…' : 'No songs found yet.');
     if (started && mode === 'idle' && state.queue.length) advance();

@@ -22,7 +22,19 @@ function cleanDir(raw) {
   if (/^[a-zA-Z]:$/.test(d)) d += '\\'; // "E:" alone means E's current folder on Windows; we want the drive root
   return d;
 }
-const CONFIG_FILE = path.join(__dirname, 'config.json');
+// Settings and imports live in a data folder outside the app folder, so installing an update
+// (replacing the app folder) never loses them. KARAOKE_DATA_DIR overrides the location.
+const DATA_DIR = process.env.KARAOKE_DATA_DIR || (
+  process.platform === 'win32' ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Karaoke Night')
+  : process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support', 'Karaoke Night')
+  : path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'karaoke-night'));
+fs.mkdirSync(DATA_DIR, { recursive: true });
+// Earlier versions kept these files in the app folder: copy them over once.
+for (const f of ['config.json', 'youtube-library.json', 'youtube-search-cache.json']) {
+  const from = path.join(__dirname, f), to = path.join(DATA_DIR, f);
+  try { if (fs.existsSync(from) && !fs.existsSync(to)) { fs.copyFileSync(from, to); console.log(`Moved ${f} to ${DATA_DIR}`); } } catch {}
+}
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
 }
@@ -418,7 +430,7 @@ async function youtubeSong(link, hint = {}) {
 const YT_API = process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com/youtube/v3'; // overridable for tests
 const youtubeKey = () => String(loadConfig().youtubeApiKey || '').trim();
 // Search results are kept on disk for 30 days, so a repeated search costs nothing, even at the next party.
-const SEARCH_CACHE_FILE = path.join(__dirname, 'youtube-search-cache.json');
+const SEARCH_CACHE_FILE = path.join(DATA_DIR, 'youtube-search-cache.json');
 const SEARCH_CACHE_DAYS = 30;
 const searchCache = new Map((() => { try { return Object.entries(JSON.parse(fs.readFileSync(SEARCH_CACHE_FILE, 'utf8'))); } catch { return []; } })());
 function saveSearchCache() {
@@ -430,7 +442,7 @@ function saveSearchCache() {
 
 // Imported channels and playlists (see lib/youtube-library.js): searched inside the app, no quota per search.
 const ytLibrary = youtubeLibrary.create({
-  file: path.join(__dirname, 'youtube-library.json'),
+  file: path.join(DATA_DIR, 'youtube-library.json'),
   api: pathAndQuery => youtubeApi(pathAndQuery, youtubeKey()),
 });
 
@@ -690,6 +702,7 @@ server.on('error', err => {
 server.listen(PORT, () => {
   console.log('\nKaraoke Night is running.');
   console.log(`  Songs folder: ${SONG_DIR || '(not chosen yet)'}   <- set by ${SONG_DIR_SOURCE}`);
+  console.log(`  Saved data:   ${DATA_DIR}   (settings, YouTube imports; kept when you update the app)`);
   console.log(`  TV screen:    http://localhost:${PORT}/tv`);
   const addrs = lanAddresses();
   if (!addrs.length) console.log(`  Phones:       (no network found; connect this computer to Wi-Fi)`);
@@ -697,7 +710,7 @@ server.listen(PORT, () => {
     ? `  Phones:       http://${a.address}:${PORT}   <- shown on the TV (${a.name})`
     : `  Also:         http://${a.address}:${PORT}   (${a.name})`));
   if (addrs.length > 1) console.log('  If phones can\'t open the TV address, add "address": "<one of the others>" to config.json.');
-  const ff = audioFix.init(__dirname, loadConfig().ffmpeg);
+  const ff = audioFix.init(__dirname, DATA_DIR, loadConfig().ffmpeg);
   console.log(ff
     ? `  ffmpeg:       found, so videos with sound browsers can't play (e.g. Dolby AC-3) get converted`
     : `  ffmpeg:       not installed. Needed only for videos whose sound plays silent (see README)`);
